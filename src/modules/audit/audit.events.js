@@ -99,3 +99,49 @@ eventBus.on(
 
   }
 );
+
+eventBus.on(
+  EVENTS.SUPPLIER_CREATED,
+  async (data) => {
+
+    try {
+
+      await pool.query(
+        `
+          INSERT INTO audit_logs
+          (
+            user_id,
+            action,
+            entity_type,
+            entity_id,
+            description,
+            metadata
+          )
+          VALUES (?, ?, ?, ?, ?, ?)
+        `,
+        [
+          data.createdBy,
+          "SUPPLIER_CREATED",
+          "supplier",
+          data.supplierId,
+          `Supplier ${data.supplierName} was created`,
+          JSON.stringify(data)
+        ]
+      );
+
+
+      console.log(
+        `[AUDIT] Supplier created: ${data.supplierName}`
+      );
+
+    } catch (error) {
+
+      console.error(
+        "[AUDIT] Failed to log supplier creation:",
+        error.message
+      );
+
+    }
+
+  }
+);

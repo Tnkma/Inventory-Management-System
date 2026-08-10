@@ -74,23 +74,35 @@ CREATE TABLE categories (
 -- =========================================================
 
 CREATE TABLE suppliers (
-    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
 
     name VARCHAR(150) NOT NULL,
-    company_name VARCHAR(150),
 
-    email VARCHAR(255),
+    contact_person VARCHAR(150),
+
+    email VARCHAR(150),
+
     phone VARCHAR(30),
 
     address TEXT,
 
+    city VARCHAR(100),
+
+    notes TEXT,
+
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
 
+    created_by INT UNSIGNED,
+
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP,
 
-    INDEX idx_suppliers_name (name)
+    CONSTRAINT fk_supplier_created_by
+        FOREIGN KEY (created_by)
+        REFERENCES users(id)
+        ON DELETE SET NULL
 );
 
 
