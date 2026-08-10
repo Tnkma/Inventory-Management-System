@@ -1,6 +1,7 @@
 import app from "./app.js";
 import env from "./config/env.js";
 import pool from "./config/database.js";
+import "./modules/audit/audit.events.js";
 
 const startServer = async () => {
   try {
