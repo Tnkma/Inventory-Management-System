@@ -16,7 +16,7 @@ VALUES
 -- CATEGORIES
 -- =========================================================
 
-INSERT INTO categories (name, description)
+INSERT INTO inventory_categories (name, description)
 VALUES
     ('Grains', 'Rice, wheat, oats and other grains'),
     ('Meat', 'Beef, chicken, pork and other meat'),
@@ -26,4 +26,8 @@ VALUES
     ('Spices', 'Pepper, salt, seasoning and spices'),
     ('Oil', 'Cooking oils and fats'),
     ('Beverages', 'Drinks and beverage ingredients'),
-    ('Frozen Foods', 'Frozen ingredients and products');
+    ('Frozen Foods', 'Frozen ingredients and products'),
+    ('Fruits', 'Fresh fruits'),
+    ('Cooking Oils', 'Cooking oils and fats'),
+    ('Packaging', 'Takeaway and food packaging'),
+    ('Cleaning Supplies', 'Restaurant cleaning materials');
