@@ -142,7 +142,6 @@ export {
   listUsers,
   getUser,
   userRole,
-
   createNewUser,
   changeUserRole,
   changeUserStatus

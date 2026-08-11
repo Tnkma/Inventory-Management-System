@@ -55,7 +55,7 @@ CREATE TABLE users (
 -- 3. CATEGORIES
 -- =========================================================
 
-CREATE TABLE categories (
+CREATE TABLE inventory_categories (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
 
     name VARCHAR(100) NOT NULL UNIQUE,
@@ -77,20 +77,32 @@ CREATE TABLE suppliers (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
 
     name VARCHAR(150) NOT NULL,
-    company_name VARCHAR(150),
 
-    email VARCHAR(255),
+    contact_person VARCHAR(150),
+
+    email VARCHAR(150),
+
     phone VARCHAR(30),
 
     address TEXT,
 
+    city VARCHAR(100),
+
+    notes TEXT,
+
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
 
+    created_by INT UNSIGNED,
+
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP,
 
-    INDEX idx_suppliers_name (name)
+    CONSTRAINT fk_supplier_created_by
+        FOREIGN KEY (created_by)
+        REFERENCES users(id)
+        ON DELETE SET NULL
 );
 
 
@@ -102,41 +114,41 @@ CREATE TABLE ingredients (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
 
     category_id INT UNSIGNED NOT NULL,
-    supplier_id INT UNSIGNED NULL,
 
     name VARCHAR(150) NOT NULL,
-    description VARCHAR(255),
+
+    sku VARCHAR(50) UNIQUE,
+
+    description TEXT,
 
     unit VARCHAR(30) NOT NULL,
 
-    cost_price DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+    minimum_stock DECIMAL(12,3) NOT NULL DEFAULT 0,
 
-    minimum_stock DECIMAL(12, 3) NOT NULL DEFAULT 0,
-    maximum_stock DECIMAL(12, 3) NULL,
+    maximum_stock DECIMAL(12,3),
+
+    reorder_level DECIMAL(12,3) NOT NULL DEFAULT 0,
 
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
 
+    created_by INT UNSIGNED,
+
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP,
 
-    CONSTRAINT fk_ingredients_category
+    CONSTRAINT fk_ingredient_category
         FOREIGN KEY (category_id)
-        REFERENCES categories(id)
+        REFERENCES inventory_categories(id)
         ON UPDATE CASCADE
         ON DELETE RESTRICT,
 
-    CONSTRAINT fk_ingredients_supplier
-        FOREIGN KEY (supplier_id)
-        REFERENCES suppliers(id)
-        ON UPDATE CASCADE
-        ON DELETE SET NULL,
-
-    INDEX idx_ingredients_name (name),
-    INDEX idx_ingredients_category (category_id),
-    INDEX idx_ingredients_supplier (supplier_id)
+    CONSTRAINT fk_ingredient_created_by
+        FOREIGN KEY (created_by)
+        REFERENCES users(id)
+        ON DELETE SET NULL
 );
-
 
 -- =========================================================
 -- 6. INVENTORY
@@ -147,19 +159,21 @@ CREATE TABLE inventory (
 
     ingredient_id INT UNSIGNED NOT NULL UNIQUE,
 
-    quantity DECIMAL(12, 3) NOT NULL DEFAULT 0,
+    current_quantity DECIMAL(12,3) NOT NULL DEFAULT 0,
 
-    location VARCHAR(100),
+    reserved_quantity DECIMAL(12,3) NOT NULL DEFAULT 0,
+
+    last_stock_update TIMESTAMP NULL,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP,
 
     CONSTRAINT fk_inventory_ingredient
         FOREIGN KEY (ingredient_id)
         REFERENCES ingredients(id)
-        ON UPDATE CASCADE
-        ON DELETE RESTRICT
+        ON DELETE CASCADE
 );
 
 
@@ -251,39 +265,57 @@ CREATE TABLE stock_movements (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
 
     ingredient_id INT UNSIGNED NOT NULL,
-    user_id INT UNSIGNED NOT NULL,
 
-    type ENUM(
-        'IN',
-        'OUT',
-        'ADJUSTMENT'
+    movement_type ENUM(
+        'PURCHASE',
+        'CONSUMPTION',
+        'WASTAGE',
+        'ADJUSTMENT',
+        'RETURN',
+        'TRANSFER'
     ) NOT NULL,
 
-    quantity DECIMAL(12, 3) NOT NULL,
+    quantity DECIMAL(12,3) NOT NULL,
 
-    reason VARCHAR(255),
+    previous_quantity DECIMAL(12,3) NOT NULL,
+
+    new_quantity DECIMAL(12,3) NOT NULL,
 
     reference_type VARCHAR(50),
-    reference_id INT UNSIGNED NULL,
+
+    reference_id INT UNSIGNED,
+
+    reason TEXT,
+
+    created_by INT UNSIGNED,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT fk_stock_movements_ingredient
+    CONSTRAINT fk_movement_ingredient
         FOREIGN KEY (ingredient_id)
-        REFERENCES ingredients(id)
-        ON UPDATE CASCADE
-        ON DELETE RESTRICT,
+        REFERENCES ingredients(id),
 
-    CONSTRAINT fk_stock_movements_user
-        FOREIGN KEY (user_id)
+    CONSTRAINT fk_movement_user
+        FOREIGN KEY (created_by)
         REFERENCES users(id)
-        ON UPDATE CASCADE
-        ON DELETE RESTRICT,
+        ON DELETE SET NULL,
 
-    INDEX idx_stock_movements_ingredient (ingredient_id),
-    INDEX idx_stock_movements_user (user_id),
-    INDEX idx_stock_movements_type (type),
-    INDEX idx_stock_movements_created (created_at)
+    INDEX idx_stock_movements_ingredient (
+        ingredient_id
+    ),
+
+    INDEX idx_stock_movements_type (
+        movement_type
+    ),
+
+    INDEX idx_stock_movements_created (
+        created_at
+    ),
+
+    INDEX idx_stock_movements_reference (
+        reference_type,
+        reference_id
+    )
 );
 
 

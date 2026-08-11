@@ -1,23 +1,80 @@
 export const EVENTS = {
-  USER_REGISTERED: "user.registered",
-  USER_LOGGED_IN: "user.logged_in",
 
-  SUPPLIER_CREATED: "supplier.created",
+    // =========================
+    // AUTH
+    // =========================
 
-  INGREDIENT_CREATED: "ingredient.created",
+    USER_REGISTERED:
+        "user.registered",
 
-  PURCHASE_CREATED: "purchase.created",
+    USER_LOGGED_IN:
+        "user.logged_in",
 
-  INVENTORY_UPDATED: "inventory.updated",
-  INVENTORY_LOW: "inventory.low",
-  INVENTORY_OUT: "inventory.out",
+    USER_LOGGED_OUT:
+        "user.logged_out",
 
-  STOCK_CONSUMED: "stock.consumed",
+    USER_PASSWORD_CHANGED:
+        "user.password_changed",
 
-  AUDIT_CREATED: "audit.created",
 
-  USER_ROLE_UPDATED: "user.role_updated",
-  USER_STATUS_UPDATED: "user.status_updated",
+    // =========================
+    // SUPPLIERS
+    // =========================
 
-  NOTIFICATION_CREATED: "notification.created"
+    SUPPLIER_CREATED:
+        "supplier.created",
+
+    SUPPLIER_UPDATED:
+        "supplier.updated",
+
+    SUPPLIER_DEACTIVATED:
+        "supplier.deactivated",
+
+
+    // =========================
+    // INGREDIENTS
+    // =========================
+
+    INGREDIENT_CREATED:
+        "ingredient.created",
+
+    INGREDIENT_UPDATED:
+        "ingredient.updated",
+
+    INGREDIENT_DEACTIVATED:
+        "ingredient.deactivated",
+
+
+    // =========================
+    // PURCHASES
+    // =========================
+
+    PURCHASE_CREATED:
+        "purchase.created",
+
+    PURCHASE_COMPLETED:
+        "purchase.completed",
+
+    PURCHASE_CANCELLED:
+        "purchase.cancelled",
+
+
+    // =========================
+    // INVENTORY
+    // =========================
+
+    STOCK_UPDATED:
+        "inventory.stock_updated",
+
+    STOCK_LOW:
+        "inventory.stock_low",
+
+    STOCK_WASTED:
+        "inventory.stock_wasted",
+
+    STOCK_ADJUSTED:
+        "inventory.stock_adjusted",
+
+    NOTIFICATION_CREATED: 
+        "NOTIFICATION_CREATED",
 };

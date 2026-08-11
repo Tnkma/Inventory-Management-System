@@ -6,6 +6,17 @@ import pool from "./config/database.js";
 import authRoutes from "./modules/auth/routes.js";
 import errorHandler from "./middleware/error.middleware.js";
 import userRoutes from "./modules/users/routes.js";
+import supplierRoutes
+  from "./modules/suppliers/routes.js";
+import ingredientRoutes
+  from "./modules/ingredients/routes.js";
+import inventoryRoutes
+  from "./modules/inventory/routes.js";
+import purchaseRoutes
+  from "./modules/purchases/routes.js";
+
+
+
 
 const app = express();
 
@@ -44,6 +55,14 @@ app.get("/api/health", async (req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/suppliers", supplierRoutes);
+app.use("/api/ingredients", ingredientRoutes);
+app.use("/api/inventory", inventoryRoutes);
+app.use(
+  "/api/purchases",
+  purchaseRoutes
+);
+
 app.use(errorHandler);
 
 
