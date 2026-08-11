@@ -1,51 +1,80 @@
 export const EVENTS = {
 
-  USER_REGISTERED:
-    "user.registered",
+    // =========================
+    // AUTH
+    // =========================
 
-  USER_LOGGED_IN:
-    "user.logged_in",
+    USER_REGISTERED:
+        "user.registered",
 
-  USER_ROLE_UPDATED:
-    "user.role_updated",
+    USER_LOGGED_IN:
+        "user.logged_in",
 
-  USER_STATUS_UPDATED:
-    "user.status_updated",
+    USER_LOGGED_OUT:
+        "user.logged_out",
 
-
-  SUPPLIER_CREATED:
-    "supplier.created",
-
-  SUPPLIER_UPDATED:
-    "supplier.updated",
-
-  SUPPLIER_STATUS_UPDATED:
-    "supplier.status_updated",
+    USER_PASSWORD_CHANGED:
+        "user.password_changed",
 
 
-  INGREDIENT_CREATED:
-    "ingredient.created",
+    // =========================
+    // SUPPLIERS
+    // =========================
 
-  PURCHASE_CREATED:
-    "purchase.created",
+    SUPPLIER_CREATED:
+        "supplier.created",
 
-  INVENTORY_UPDATED:
-    "inventory.updated",
+    SUPPLIER_UPDATED:
+        "supplier.updated",
 
-  INVENTORY_LOW:
-    "inventory.low",
-
-  INVENTORY_OUT:
-    "inventory.out",
-
-  STOCK_CONSUMED:
-    "stock.consumed",
+    SUPPLIER_DEACTIVATED:
+        "supplier.deactivated",
 
 
-  AUDIT_CREATED:
-    "audit.created",
+    // =========================
+    // INGREDIENTS
+    // =========================
 
-  NOTIFICATION_CREATED:
-    "notification.created"
+    INGREDIENT_CREATED:
+        "ingredient.created",
 
+    INGREDIENT_UPDATED:
+        "ingredient.updated",
+
+    INGREDIENT_DEACTIVATED:
+        "ingredient.deactivated",
+
+
+    // =========================
+    // PURCHASES
+    // =========================
+
+    PURCHASE_CREATED:
+        "purchase.created",
+
+    PURCHASE_COMPLETED:
+        "purchase.completed",
+
+    PURCHASE_CANCELLED:
+        "purchase.cancelled",
+
+
+    // =========================
+    // INVENTORY
+    // =========================
+
+    STOCK_UPDATED:
+        "inventory.stock_updated",
+
+    STOCK_LOW:
+        "inventory.stock_low",
+
+    STOCK_WASTED:
+        "inventory.stock_wasted",
+
+    STOCK_ADJUSTED:
+        "inventory.stock_adjusted",
+
+    NOTIFICATION_CREATED: 
+        "NOTIFICATION_CREATED",
 };

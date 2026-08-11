@@ -10,6 +10,10 @@ import supplierRoutes
   from "./modules/suppliers/routes.js";
 import ingredientRoutes
   from "./modules/ingredients/routes.js";
+import inventoryRoutes
+  from "./modules/inventory/routes.js";
+import purchaseRoutes
+  from "./modules/purchases/routes.js";
 
 
 
@@ -53,6 +57,12 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/suppliers", supplierRoutes);
 app.use("/api/ingredients", ingredientRoutes);
+app.use("/api/inventory", inventoryRoutes);
+app.use(
+  "/api/purchases",
+  purchaseRoutes
+);
+
 app.use(errorHandler);
 
 

@@ -1,8 +1,15 @@
-import eventBus from "../../events/eventBus.js";
-import pool from "../../config/database.js";
-import { EVENTS } from "../../events/eventTypes.js";
+import eventBus from "../eventBus.js";
+
+import { EVENTS }
+  from "../eventTypes.js";
+
+import pool
+  from "../../config/database.js";
 
 
+
+
+// USER REGISTERED
 eventBus.on(
   EVENTS.USER_REGISTERED,
   async (data) => {
@@ -20,6 +27,7 @@ eventBus.on(
             description,
             metadata
           )
+
           VALUES (?, ?, ?, ?, ?, ?)
         `,
         [
@@ -34,6 +42,7 @@ eventBus.on(
           })
         ]
       );
+
 
       console.log(
         `[AUDIT] User registered: ${data.email}`
@@ -52,6 +61,8 @@ eventBus.on(
 );
 
 
+
+// USER LOGGED IN
 eventBus.on(
   EVENTS.USER_LOGGED_IN,
   async (data) => {
@@ -69,6 +80,7 @@ eventBus.on(
             description,
             metadata
           )
+
           VALUES (?, ?, ?, ?, ?, ?)
         `,
         [
@@ -83,6 +95,7 @@ eventBus.on(
           })
         ]
       );
+
 
       console.log(
         `[AUDIT] User logged in: ${data.email}`
@@ -100,6 +113,9 @@ eventBus.on(
   }
 );
 
+
+
+// SUPPLIER CREATED
 eventBus.on(
   EVENTS.SUPPLIER_CREATED,
   async (data) => {
@@ -117,6 +133,7 @@ eventBus.on(
             description,
             metadata
           )
+
           VALUES (?, ?, ?, ?, ?, ?)
         `,
         [
@@ -138,6 +155,120 @@ eventBus.on(
 
       console.error(
         "[AUDIT] Failed to log supplier creation:",
+        error.message
+      );
+
+    }
+
+  }
+);
+
+
+
+// STOCK UPDATED
+eventBus.on(
+  EVENTS.STOCK_UPDATED,
+  async (data) => {
+
+    try {
+
+      await pool.query(
+        `
+          INSERT INTO audit_logs
+          (
+            user_id,
+            action,
+            entity_type,
+            entity_id,
+            description,
+            metadata
+          )
+
+          VALUES (?, ?, ?, ?, ?, ?)
+        `,
+        [
+          data.createdBy,
+          "STOCK_UPDATED",
+          "stock_movement",
+          data.movementId,
+          `Stock updated for ingredient ${data.ingredientId}`,
+          JSON.stringify({
+            ingredientId: data.ingredientId,
+            movementId: data.movementId,
+            movementType: data.movementType,
+            quantity: data.quantity,
+            previousQuantity: data.previousQuantity,
+            newQuantity: data.newQuantity
+          })
+        ]
+      );
+
+
+      console.log(
+        `[AUDIT] Stock updated: ` +
+        `ingredient ${data.ingredientId}`
+      );
+
+    } catch (error) {
+
+      console.error(
+        "[AUDIT] Failed to save stock update log:",
+        error.message
+      );
+
+    }
+
+  }
+);
+
+
+
+// Notification Created
+
+eventBus.on(
+  EVENTS.NOTIFICATION_CREATED,
+  async (data) => {
+
+    try {
+
+      await pool.query(
+        `
+          INSERT INTO audit_logs
+          (
+            user_id,
+            action,
+            entity_type,
+            entity_id,
+            description,
+            metadata
+          )
+
+          VALUES (?, ?, ?, ?, ?, ?)
+        `,
+        [
+          data.userId,
+          "NOTIFICATION_CREATED",
+          "notification",
+          data.id,
+          `Notification created: ${data.title}`,
+          JSON.stringify({
+            notificationId: data.id,
+            type: data.type,
+            title: data.title,
+            message: data.message
+          })
+        ]
+      );
+
+
+      console.log(
+        `[AUDIT] Notification created: ${data.title}`
+      );
+
+    } catch (error) {
+
+      console.error(
+        "[AUDIT] Failed to save notification log:",
         error.message
       );
 
