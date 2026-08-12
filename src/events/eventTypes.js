@@ -77,4 +77,30 @@ export const EVENTS = {
 
     NOTIFICATION_CREATED: 
         "NOTIFICATION_CREATED",
+
+    CONSUMPTION_RECORDED:
+        "CONSUMPTION_RECORDED",
+
+    WASTAGE_RECORDED:
+        "WASTAGE_RECORDED",
+
+    INVENTORY_LOCATION_CREATED:
+        "inventory.location.created",
+
+    INVENTORY_LOCATION_UPDATED:
+      "inventory.location.updated",
+
+    INVENTORY_LOCATION_STATUS_CHANGED:
+      "inventory.location.status.changed",
+
+    TRANSFER_COMPLETED:
+      "transfer.completed",
+
+    CATEGORY_CREATED: 
+      "CATEGORY_CREATED",
+
+    CATEGORY_UPDATED: 
+      "CATEGORY_UPDATED",
+    CATEGORY_STATUS_UPDATED: 
+      "CATEGORY_STATUS_UPDATED",
 };

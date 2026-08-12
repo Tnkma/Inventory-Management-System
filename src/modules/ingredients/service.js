@@ -5,7 +5,10 @@ import eventBus from "../../events/eventBus.js";
 import { EVENTS } from "../../events/eventTypes.js";
 
 
-// create a new ingredient
+// =========================================================
+// CREATE INGREDIENT
+// =========================================================
+
 const createIngredient = async (
   {
     name,
@@ -25,6 +28,11 @@ const createIngredient = async (
   try {
 
     await connection.beginTransaction();
+
+
+    // -----------------------------------------------------
+    // Check category
+    // -----------------------------------------------------
 
     const [categories] = await connection.query(
       `
@@ -49,6 +57,11 @@ const createIngredient = async (
       throw error;
     }
 
+
+    // -----------------------------------------------------
+    // Check duplicate ingredient
+    // -----------------------------------------------------
+
     const [existing] = await connection.query(
       `
         SELECT id
@@ -70,6 +83,11 @@ const createIngredient = async (
 
       throw error;
     }
+
+
+    // -----------------------------------------------------
+    // Create ingredient
+    // -----------------------------------------------------
 
     const [result] = await connection.query(
       `
@@ -103,18 +121,10 @@ const createIngredient = async (
 
     const ingredientId = result.insertId;
 
-    await connection.query(
-      `
-        INSERT INTO inventory
-        (
-          ingredient_id,
-          current_quantity,
-          reserved_quantity
-        )
-        VALUES (?, 0, 0)
-      `,
-      [ingredientId]
-    );
+
+    // -----------------------------------------------------
+    // Get newly created ingredient
+    // -----------------------------------------------------
 
     const [ingredients] = await connection.query(
       `
@@ -135,9 +145,6 @@ const createIngredient = async (
           c.id AS category_id,
           c.name AS category,
 
-          inv.current_quantity,
-          inv.reserved_quantity,
-
           i.created_at,
           i.updated_at
 
@@ -145,9 +152,6 @@ const createIngredient = async (
 
         INNER JOIN inventory_categories c
           ON i.category_id = c.id
-
-        INNER JOIN inventory inv
-          ON i.id = inv.ingredient_id
 
         WHERE i.id = ?
 
@@ -157,8 +161,27 @@ const createIngredient = async (
     );
 
 
+    if (ingredients.length === 0) {
+
+      const error = new Error(
+        "Failed to retrieve created ingredient"
+      );
+
+      error.statusCode = 500;
+
+      throw error;
+    }
+
+
     const ingredient = ingredients[0];
+
+
     await connection.commit();
+
+
+    // -----------------------------------------------------
+    // Emit event AFTER successful transaction
+    // -----------------------------------------------------
 
     eventBus.emit(
       EVENTS.INGREDIENT_CREATED,
@@ -171,6 +194,7 @@ const createIngredient = async (
       }
     );
 
+
     return ingredient;
 
 
@@ -182,14 +206,16 @@ const createIngredient = async (
 
   } finally {
 
-    // release the connection back to the pool
     connection.release();
 
   }
 };
 
 
-// get all ingredients
+// =========================================================
+// GET ALL INGREDIENTS
+// =========================================================
+
 const getIngredients = async () => {
 
   const [ingredients] = await pool.query(
@@ -211,8 +237,27 @@ const getIngredients = async () => {
         c.id AS category_id,
         c.name AS category,
 
-        inv.current_quantity,
-        inv.reserved_quantity,
+        COALESCE(
+          SUM(inv.current_quantity),
+          0
+        ) AS current_quantity,
+
+        COALESCE(
+          SUM(inv.reserved_quantity),
+          0
+        ) AS reserved_quantity,
+
+        (
+          COALESCE(
+            SUM(inv.current_quantity),
+            0
+          )
+          -
+          COALESCE(
+            SUM(inv.reserved_quantity),
+            0
+          )
+        ) AS available_quantity,
 
         i.created_at,
         i.updated_at
@@ -222,8 +267,23 @@ const getIngredients = async () => {
       INNER JOIN inventory_categories c
         ON i.category_id = c.id
 
-      INNER JOIN inventory inv
+      LEFT JOIN inventory inv
         ON i.id = inv.ingredient_id
+
+      GROUP BY
+        i.id,
+        i.name,
+        i.sku,
+        i.description,
+        i.unit,
+        i.minimum_stock,
+        i.maximum_stock,
+        i.reorder_level,
+        i.is_active,
+        c.id,
+        c.name,
+        i.created_at,
+        i.updated_at
 
       ORDER BY i.name ASC
     `
@@ -234,8 +294,10 @@ const getIngredients = async () => {
 };
 
 
+// =========================================================
+// GET INGREDIENT BY ID
+// =========================================================
 
-// get ingredient by id
 const getIngredientById = async (
   ingredientId
 ) => {
@@ -259,8 +321,27 @@ const getIngredientById = async (
         c.id AS category_id,
         c.name AS category,
 
-        inv.current_quantity,
-        inv.reserved_quantity,
+        COALESCE(
+          SUM(inv.current_quantity),
+          0
+        ) AS current_quantity,
+
+        COALESCE(
+          SUM(inv.reserved_quantity),
+          0
+        ) AS reserved_quantity,
+
+        (
+          COALESCE(
+            SUM(inv.current_quantity),
+            0
+          )
+          -
+          COALESCE(
+            SUM(inv.reserved_quantity),
+            0
+          )
+        ) AS available_quantity,
 
         i.created_at,
         i.updated_at
@@ -270,10 +351,25 @@ const getIngredientById = async (
       INNER JOIN inventory_categories c
         ON i.category_id = c.id
 
-      INNER JOIN inventory inv
+      LEFT JOIN inventory inv
         ON i.id = inv.ingredient_id
 
       WHERE i.id = ?
+
+      GROUP BY
+        i.id,
+        i.name,
+        i.sku,
+        i.description,
+        i.unit,
+        i.minimum_stock,
+        i.maximum_stock,
+        i.reorder_level,
+        i.is_active,
+        c.id,
+        c.name,
+        i.created_at,
+        i.updated_at
 
       LIMIT 1
     `,

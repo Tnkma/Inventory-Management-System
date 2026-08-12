@@ -15,6 +15,21 @@ import inventoryRoutes
 import purchaseRoutes
   from "./modules/purchases/routes.js";
 
+import consumptionRoutes
+  from "./modules/consumption/routes.js";
+
+import wastageRoutes
+  from "./modules/wastage/routes.js";
+
+import inventoryLocationRoutes
+  from "./modules/inventoryLocations/routes.js";
+
+import transferRoutes
+  from "./modules/transfers/routes.js";
+
+import categoryRoutes
+  from "./modules/categories/routes.js";
+
 
 
 
@@ -61,6 +76,27 @@ app.use("/api/inventory", inventoryRoutes);
 app.use(
   "/api/purchases",
   purchaseRoutes
+);
+app.use(
+  "/api/consumption",
+  consumptionRoutes
+);
+app.use(
+  "/api/wastage",
+  wastageRoutes
+);
+
+app.use(
+  "/api/inventory-locations",
+  inventoryLocationRoutes
+);
+app.use(
+  "/api/transfers",
+  transferRoutes
+);
+app.use(
+  "/api/categories",
+  categoryRoutes
 );
 
 app.use(errorHandler);

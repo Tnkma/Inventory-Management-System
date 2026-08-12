@@ -1,6 +1,7 @@
 import {
   getInventory,
   getInventoryByIngredient,
+  createInventoryRecord,
   updateStock,
   getStockMovements,
   checkLowStock
@@ -14,9 +15,11 @@ import {
 const getAllInventory = async (req, res, next) => {
 
   try {
+
     console.log("getAllInventory called");
 
-    const inventory = await getInventory();
+    const inventory =
+      await getInventory();
 
     res.status(200).json({
       success: true,
@@ -32,19 +35,46 @@ const getAllInventory = async (req, res, next) => {
 
 
 // =========================================================
-// GET INVENTORY BY INGREDIENT
+// GET INVENTORY BY INGREDIENT + LOCATION
 // =========================================================
 
-const getInventoryItem = async (req, res, next) => {
+const getInventoryItem = async (
+  req,
+  res,
+  next
+) => {
 
   try {
 
-    const { ingredientId } = req.params;
+    const { ingredientId } =
+      req.params;
+
+    const { locationId } =
+      req.query;
+
+
+    // -----------------------------------------------------
+    // Validate locationId
+    // -----------------------------------------------------
+
+    if (!locationId) {
+
+      const error = new Error(
+        "locationId is required"
+      );
+
+      error.statusCode = 400;
+
+      throw error;
+    }
+
 
     const inventory =
       await getInventoryByIngredient(
-        ingredientId
+        ingredientId,
+        locationId
       );
+
 
     res.status(200).json({
       success: true,
@@ -71,9 +101,12 @@ const updateIngredientStock = async (
 
   try {
 
-    const { ingredientId } = req.params;
+    const { ingredientId } =
+      req.params;
+
 
     const {
+      locationId,
       quantity,
       movementType,
       reason,
@@ -82,24 +115,51 @@ const updateIngredientStock = async (
     } = req.body;
 
 
-    const result = await updateStock(
-      {
-        ingredientId,
-        quantity,
-        movementType,
-        reason,
-        referenceType,
-        referenceId
-      },
-      req.user.userId,
-      // console.log("Authenticated user:", req.user)
-    );
+    // -----------------------------------------------------
+    // Validate locationId
+    // -----------------------------------------------------
+
+    if (!locationId) {
+
+      const error = new Error(
+        "locationId is required"
+      );
+
+      error.statusCode = 400;
+
+      throw error;
+    }
+
+
+    // -----------------------------------------------------
+    // Update stock
+    // -----------------------------------------------------
+
+    const result =
+      await updateStock(
+        {
+          ingredientId,
+          locationId,
+          quantity,
+          movementType,
+          reason,
+          referenceType,
+          referenceId
+        },
+
+        req.user.userId
+      );
 
 
     res.status(200).json({
+
       success: true,
-      message: "Stock updated successfully",
+
+      message:
+        "Stock updated successfully",
+
       data: result
+
     });
 
   } catch (error) {
@@ -124,6 +184,7 @@ const getStockMovementHistory = async (
 
     const {
       ingredientId,
+      locationId,
       movementType
     } = req.query;
 
@@ -131,6 +192,7 @@ const getStockMovementHistory = async (
     const movements =
       await getStockMovements({
         ingredientId,
+        locationId,
         movementType
       });
 
@@ -148,8 +210,10 @@ const getStockMovementHistory = async (
 };
 
 
+// =========================================================
+// CHECK LOW STOCK
+// =========================================================
 
-// check low stock for ingredients
 const checkIngredientLowStock = async (
   req,
   res,
@@ -180,11 +244,79 @@ const checkIngredientLowStock = async (
   }
 };
 
+// =========================================================
+// CREATE INVENTORY RECORD
+// =========================================================
+
+const createInventory = async (
+  req,
+  res,
+  next
+) => {
+
+  try {
+
+    const {
+      ingredientId,
+      locationId
+    } = req.body;
+
+
+    if (!ingredientId) {
+
+      const error = new Error(
+        "ingredientId is required"
+      );
+
+      error.statusCode = 400;
+
+      throw error;
+    }
+
+
+    if (!locationId) {
+
+      const error = new Error(
+        "locationId is required"
+      );
+
+      error.statusCode = 400;
+
+      throw error;
+    }
+
+
+    const inventory =
+      await createInventoryRecord({
+        ingredientId,
+        locationId
+      });
+
+
+    res.status(201).json({
+
+      success: true,
+
+      message:
+        "Inventory record created successfully",
+
+      data: inventory
+
+    });
+
+  } catch (error) {
+
+    next(error);
+
+  }
+};
+
 
 export {
   getAllInventory,
   getInventoryItem,
   updateIngredientStock,
   getStockMovementHistory,
-  checkIngredientLowStock
+  checkIngredientLowStock,
+  createInventory
 };

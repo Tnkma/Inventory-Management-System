@@ -151,13 +151,35 @@ CREATE TABLE ingredients (
 );
 
 -- =========================================================
--- 6. INVENTORY
+-- 6. INVENTORY LOCATIONS
+-- =========================================================
+
+CREATE TABLE inventory_locations (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+
+    name VARCHAR(100) NOT NULL UNIQUE,
+
+    description VARCHAR(255),
+
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP
+);
+
+
+-- =========================================================
+-- 7. INVENTORY
 -- =========================================================
 
 CREATE TABLE inventory (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
 
-    ingredient_id INT UNSIGNED NOT NULL UNIQUE,
+    ingredient_id INT UNSIGNED NOT NULL,
+
+    location_id INT UNSIGNED NOT NULL,
 
     current_quantity DECIMAL(12,3) NOT NULL DEFAULT 0,
 
@@ -173,9 +195,65 @@ CREATE TABLE inventory (
     CONSTRAINT fk_inventory_ingredient
         FOREIGN KEY (ingredient_id)
         REFERENCES ingredients(id)
-        ON DELETE CASCADE
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_inventory_location
+        FOREIGN KEY (location_id)
+        REFERENCES inventory_locations(id)
+        ON DELETE RESTRICT,
+
+    UNIQUE KEY unique_ingredient_location (
+        ingredient_id,
+        location_id
+    )
 );
 
+-- =========================================================
+-- 12. STOCK TRANSFERS
+-- =========================================================
+
+CREATE TABLE stock_transfers (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+
+    ingredient_id INT UNSIGNED NOT NULL,
+
+    from_location_id INT UNSIGNED NOT NULL,
+    to_location_id INT UNSIGNED NOT NULL,
+
+    quantity DECIMAL(12,3) NOT NULL,
+
+    reason TEXT,
+
+    created_by INT UNSIGNED,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_transfer_ingredient
+        FOREIGN KEY (ingredient_id)
+        REFERENCES ingredients(id)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT fk_transfer_from_location
+        FOREIGN KEY (from_location_id)
+        REFERENCES inventory_locations(id)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT fk_transfer_to_location
+        FOREIGN KEY (to_location_id)
+        REFERENCES inventory_locations(id)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT fk_transfer_created_by
+        FOREIGN KEY (created_by)
+        REFERENCES users(id)
+        ON DELETE SET NULL,
+
+    INDEX idx_transfer_ingredient (ingredient_id),
+    INDEX idx_transfer_from_location (from_location_id),
+    INDEX idx_transfer_to_location (to_location_id),
+    INDEX idx_transfer_created_by (created_by),
+    INDEX idx_transfer_created_at (created_at)
+);
 
 -- =========================================================
 -- 7. PURCHASES
@@ -266,6 +344,8 @@ CREATE TABLE stock_movements (
 
     ingredient_id INT UNSIGNED NOT NULL,
 
+    location_id INT UNSIGNED NOT NULL,
+
     movement_type ENUM(
         'PURCHASE',
         'CONSUMPTION',
@@ -295,29 +375,15 @@ CREATE TABLE stock_movements (
         FOREIGN KEY (ingredient_id)
         REFERENCES ingredients(id),
 
+    CONSTRAINT fk_movement_location
+        FOREIGN KEY (location_id)
+        REFERENCES inventory_locations(id),
+
     CONSTRAINT fk_movement_user
         FOREIGN KEY (created_by)
         REFERENCES users(id)
-        ON DELETE SET NULL,
-
-    INDEX idx_stock_movements_ingredient (
-        ingredient_id
-    ),
-
-    INDEX idx_stock_movements_type (
-        movement_type
-    ),
-
-    INDEX idx_stock_movements_created (
-        created_at
-    ),
-
-    INDEX idx_stock_movements_reference (
-        reference_type,
-        reference_id
-    )
+        ON DELETE SET NULL
 );
-
 
 -- =========================================================
 -- 10. NOTIFICATIONS

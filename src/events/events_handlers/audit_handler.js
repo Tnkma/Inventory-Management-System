@@ -276,3 +276,218 @@ eventBus.on(
 
   }
 );
+
+
+// PURCHASE COMPLETED
+eventBus.on(
+  EVENTS.PURCHASE_COMPLETED,
+  async (data) => {
+
+    try {
+
+      await pool.query(
+        `
+          INSERT INTO audit_logs
+          (
+            user_id,
+            action,
+            entity_type,
+            entity_id,
+            description,
+            metadata
+          )
+          VALUES (?, ?, ?, ?, ?, ?)
+        `,
+        [
+          data.completedBy,
+          "PURCHASE_COMPLETED",
+          "purchase",
+          data.purchaseId,
+
+          `Purchase #${data.purchaseId} was completed`,
+
+          JSON.stringify(data)
+        ]
+      );
+
+
+      console.log(
+        `[AUDIT] Purchase completed: #${data.purchaseId}`
+      );
+
+
+    } catch (error) {
+
+      console.error(
+        "[AUDIT] Failed to log purchase completion:",
+        error.message
+      );
+
+    }
+
+  }
+);
+
+
+// PURCHASE CANCELLED
+eventBus.on(
+  EVENTS.PURCHASE_CANCELLED,
+  async (data) => {
+
+    try {
+
+      await pool.query(
+        `
+          INSERT INTO audit_logs
+          (
+            user_id,
+            action,
+            entity_type,
+            entity_id,
+            description,
+            metadata
+          )
+          VALUES (?, ?, ?, ?, ?, ?)
+        `,
+        [
+          data.cancelledBy,
+          "PURCHASE_CANCELLED",
+          "purchase",
+          data.purchaseId,
+
+          `Purchase #${data.purchaseId} was cancelled`,
+
+          JSON.stringify(data)
+        ]
+      );
+
+
+      console.log(
+        `[AUDIT] Purchase cancelled: #${data.purchaseId}`
+      );
+
+
+    } catch (error) {
+
+      console.error(
+        "[AUDIT] Failed to log purchase cancellation:",
+        error.message
+      );
+
+    }
+
+  }
+);
+
+
+// WASTAGE RECORDED
+eventBus.on(
+  EVENTS.WASTAGE_RECORDED,
+  async (data) => {
+
+    try {
+
+      await pool.query(
+        `
+          INSERT INTO audit_logs
+          (
+            user_id,
+            action,
+            entity_type,
+            entity_id,
+            description,
+            metadata
+          )
+          VALUES (?, ?, ?, ?, ?, ?)
+        `,
+        [
+          data.createdBy,
+
+          "WASTAGE_RECORDED",
+
+          "wastage",
+
+          data.movementId,
+
+          `${data.quantity} ${data.unit} ` +
+          `of ${data.ingredientName} was wasted`,
+
+          JSON.stringify(data)
+        ]
+      );
+
+
+      console.log(
+        `[AUDIT] Wastage recorded: ` +
+        `${data.ingredientName}`
+      );
+
+
+    } catch (error) {
+
+      console.error(
+        "[AUDIT] Failed to log wastage:",
+        error.message
+      );
+
+    }
+
+  }
+);
+
+
+// TRANSFER COMPLETED
+eventBus.on(
+  EVENTS.TRANSFER_COMPLETED,
+  async (data) => {
+
+    try {
+
+      await pool.query(
+        `
+          INSERT INTO audit_logs
+          (
+            user_id,
+            action,
+            entity_type,
+            entity_id,
+            description,
+            metadata
+          )
+
+          VALUES (?, ?, ?, ?, ?, ?)
+        `,
+        [
+          data.createdBy,
+
+          "TRANSFER_COMPLETED",
+
+          "stock_transfer",
+
+          data.transferId,
+
+          `Transferred ${data.quantity} ` +
+          `${data.ingredientName} from location ` +
+          `${data.fromLocationId} to location ` +
+          `${data.toLocationId}`,
+
+          JSON.stringify(data)
+        ]
+      );
+
+
+      console.log(
+        `[AUDIT] Transfer completed: ${data.transferId}`
+      );
+
+    } catch (error) {
+
+      console.error(
+        "[AUDIT] Failed to log transfer:",
+        error.message
+      );
+
+    }
+
+  }
+);

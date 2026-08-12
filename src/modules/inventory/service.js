@@ -7,7 +7,10 @@ import { EVENTS }
   from "../../events/eventTypes.js";
 
 
-// Get all inventory records
+// =========================================================
+// GET ALL INVENTORY
+// =========================================================
+
 const getInventory = async () => {
 
   const [inventory] = await pool.query(
@@ -15,11 +18,15 @@ const getInventory = async () => {
       SELECT
 
         inv.id,
+
         inv.ingredient_id,
+        inv.location_id,
 
         i.name AS ingredient,
         i.sku,
         i.unit,
+
+        loc.name AS location,
 
         i.minimum_stock,
         i.maximum_stock,
@@ -43,19 +50,30 @@ const getInventory = async () => {
       INNER JOIN ingredients i
         ON inv.ingredient_id = i.id
 
-      WHERE i.is_active = TRUE
+      INNER JOIN inventory_locations loc
+        ON inv.location_id = loc.id
 
-      ORDER BY i.name ASC
+      WHERE i.is_active = TRUE
+        AND loc.is_active = TRUE
+
+      ORDER BY
+        i.name ASC,
+        loc.name ASC
     `
   );
+
 
   return inventory;
 };
 
 
-// Get inventory by ingredient
+// =========================================================
+// GET INVENTORY BY INGREDIENT + LOCATION
+// =========================================================
+
 const getInventoryByIngredient = async (
-  ingredientId
+  ingredientId,
+  locationId
 ) => {
 
   const [inventory] = await pool.query(
@@ -63,11 +81,15 @@ const getInventoryByIngredient = async (
       SELECT
 
         inv.id,
+
         inv.ingredient_id,
+        inv.location_id,
 
         i.name AS ingredient,
         i.sku,
         i.unit,
+
+        loc.name AS location,
 
         i.minimum_stock,
         i.maximum_stock,
@@ -91,11 +113,18 @@ const getInventoryByIngredient = async (
       INNER JOIN ingredients i
         ON inv.ingredient_id = i.id
 
+      INNER JOIN inventory_locations loc
+        ON inv.location_id = loc.id
+
       WHERE inv.ingredient_id = ?
+        AND inv.location_id = ?
 
       LIMIT 1
     `,
-    [ingredientId]
+    [
+      ingredientId,
+      locationId
+    ]
   );
 
 
@@ -115,85 +144,41 @@ const getInventoryByIngredient = async (
 };
 
 
-// Update stock for an ingredient
-const updateStock = async ({
+
+// =========================================================
+// CREATE INVENTORY RECORD
+// =========================================================
+
+const createInventoryRecord = async ({
   ingredientId,
-  quantity,
-  movementType,
-  reason = null,
-  referenceType = null,
-  referenceId = null
-}, createdBy) => {
-
-  // Validate movement type
-  const allowedMovementTypes = [
-    "PURCHASE",
-    "CONSUMPTION",
-    "WASTAGE",
-    "ADJUSTMENT",
-    "RETURN",
-    "TRANSFER"
-  ];
-
-
-  if (!allowedMovementTypes.includes(movementType)) {
-
-    const error = new Error(
-      "Invalid stock movement type"
-    );
-
-    error.statusCode = 400;
-
-    throw error;
-  }
-
-// validate quantity
-
-  const numericQuantity = Number(quantity);
-
-
-  if (
-    !Number.isFinite(numericQuantity) ||
-    numericQuantity === 0
-  ) {
-
-    const error = new Error(
-      "Quantity must be a valid non-zero number"
-    );
-
-    error.statusCode = 400;
-
-    throw error;
-  }
-
-
+  locationId
+}) => {
 
   const connection = await pool.getConnection();
 
-
   try {
-
 
     await connection.beginTransaction();
 
-    // Lock inventory record
+    // -----------------------------------------------------
+    // Validate ingredient
+    // -----------------------------------------------------
 
-    const [inventory] = await connection.query(
+    const [ingredients] = await connection.query(
       `
-        SELECT
-          current_quantity
-        FROM inventory
-        WHERE ingredient_id = ?
-        FOR UPDATE
+        SELECT id
+        FROM ingredients
+        WHERE id = ?
+          AND is_active = TRUE
+        LIMIT 1
       `,
       [ingredientId]
     );
 
-
-    if (inventory.length === 0) {
+    if (ingredients.length === 0) {
 
       const error = new Error(
-        "Inventory record not found"
+        "Ingredient not found"
       );
 
       error.statusCode = 404;
@@ -201,19 +186,268 @@ const updateStock = async ({
       throw error;
     }
 
-    // Get previous quantity
+
+    // -----------------------------------------------------
+    // Validate location
+    // -----------------------------------------------------
+
+    const [locations] = await connection.query(
+      `
+        SELECT id
+        FROM inventory_locations
+        WHERE id = ?
+          AND is_active = TRUE
+        LIMIT 1
+      `,
+      [locationId]
+    );
+
+    if (locations.length === 0) {
+
+      const error = new Error(
+        "Inventory location not found"
+      );
+
+      error.statusCode = 404;
+
+      throw error;
+    }
+
+
+    // -----------------------------------------------------
+    // Check existing inventory record
+    // -----------------------------------------------------
+
+    const [existing] = await connection.query(
+      `
+        SELECT id
+        FROM inventory
+        WHERE ingredient_id = ?
+          AND location_id = ?
+        LIMIT 1
+      `,
+      [
+        ingredientId,
+        locationId
+      ]
+    );
+
+
+    if (existing.length > 0) {
+
+      const error = new Error(
+        "Inventory record already exists for this location"
+      );
+
+      error.statusCode = 409;
+
+      throw error;
+    }
+
+
+    // -----------------------------------------------------
+    // Create inventory record
+    // -----------------------------------------------------
+
+    const [result] = await connection.query(
+      `
+        INSERT INTO inventory
+        (
+          ingredient_id,
+          location_id,
+          current_quantity,
+          reserved_quantity
+        )
+        VALUES (?, ?, 0, 0)
+      `,
+      [
+        ingredientId,
+        locationId
+      ]
+    );
+
+
+    // -----------------------------------------------------
+    // Get created record
+    // -----------------------------------------------------
+
+    const [inventory] = await connection.query(
+      `
+        SELECT
+          inv.id,
+          inv.ingredient_id,
+          inv.location_id,
+
+          i.name AS ingredient,
+          i.sku,
+          i.unit,
+
+          loc.name AS location,
+
+          inv.current_quantity,
+          inv.reserved_quantity,
+
+          (
+            inv.current_quantity -
+            inv.reserved_quantity
+          ) AS available_quantity,
+
+          inv.last_stock_update,
+          inv.created_at,
+          inv.updated_at
+
+        FROM inventory inv
+
+        INNER JOIN ingredients i
+          ON inv.ingredient_id = i.id
+
+        INNER JOIN inventory_locations loc
+          ON inv.location_id = loc.id
+
+        WHERE inv.id = ?
+
+        LIMIT 1
+      `,
+      [result.insertId]
+    );
+
+
+    await connection.commit();
+
+    return inventory[0];
+
+  } catch (error) {
+
+    await connection.rollback();
+
+    throw error;
+
+  } finally {
+
+    connection.release();
+
+  }
+};
+
+
+// =========================================================
+// UPDATE STOCK
+// =========================================================
+
+const updateStock = async ({
+  ingredientId,
+  locationId,
+  quantity,
+  movementType,
+  reason = null,
+  referenceType = null,
+  referenceId = null
+}, createdBy) => {
+
+  const connection =
+    await pool.getConnection();
+
+
+  try {
+
+    await connection.beginTransaction();
+
+
+    // -----------------------------------------------------
+    // Validate location
+    // -----------------------------------------------------
+
+    const [locations] =
+      await connection.query(
+        `
+          SELECT
+            id,
+            name
+
+          FROM inventory_locations
+
+          WHERE id = ?
+            AND is_active = TRUE
+
+          LIMIT 1
+        `,
+        [locationId]
+      );
+
+
+    if (locations.length === 0) {
+
+      const error = new Error(
+        "Inventory location not found"
+      );
+
+      error.statusCode = 404;
+
+      throw error;
+    }
+
+
+    // -----------------------------------------------------
+    // Get current inventory
+    // Lock row for transaction
+    // -----------------------------------------------------
+
+    const [inventory] =
+      await connection.query(
+        `
+          SELECT
+            current_quantity
+
+          FROM inventory
+
+          WHERE ingredient_id = ?
+            AND location_id = ?
+
+          FOR UPDATE
+        `,
+        [
+          ingredientId,
+          locationId
+        ]
+      );
+
+
+    if (inventory.length === 0) {
+
+      const error = new Error(
+        "Inventory record not found for this location"
+      );
+
+      error.statusCode = 404;
+
+      throw error;
+    }
+
 
     const previousQuantity =
-      Number(inventory[0].current_quantity);
+      Number(
+        inventory[0].current_quantity
+      );
 
-      // calculate new quantity
+
+    // -----------------------------------------------------
+    // Calculate new quantity
+    // -----------------------------------------------------
+
+    const stockChange =
+      Number(quantity);
+
 
     const newQuantity =
-      previousQuantity + numericQuantity;
+      previousQuantity +
+      stockChange;
 
 
-        // prevent negative stock
-      if (newQuantity < 0) {
+    // -----------------------------------------------------
+    // Prevent negative stock
+    // -----------------------------------------------------
+
+    if (newQuantity < 0) {
 
       const error = new Error(
         "Insufficient stock"
@@ -225,7 +459,9 @@ const updateStock = async ({
     }
 
 
+    // -----------------------------------------------------
     // Update inventory
+    // -----------------------------------------------------
 
     await connection.query(
       `
@@ -236,66 +472,101 @@ const updateStock = async ({
           last_stock_update = CURRENT_TIMESTAMP
 
         WHERE ingredient_id = ?
+          AND location_id = ?
       `,
       [
         newQuantity,
-        ingredientId
-      ]
-    );
-
-// Record stock movement
-    const [movement] = await connection.query(
-      `
-        INSERT INTO stock_movements
-        (
-          ingredient_id,
-          movement_type,
-          quantity,
-          previous_quantity,
-          new_quantity,
-          reference_type,
-          reference_id,
-          reason,
-          created_by
-        )
-
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-      [
         ingredientId,
-        movementType,
-        numericQuantity,
-        previousQuantity,
-        newQuantity,
-        referenceType,
-        referenceId,
-        reason,
-        createdBy
+        locationId
       ]
     );
+
+
+    // -----------------------------------------------------
+    // Record stock movement
+    // -----------------------------------------------------
+
+    const [movement] =
+      await connection.query(
+        `
+          INSERT INTO stock_movements
+          (
+            ingredient_id,
+            location_id,
+            movement_type,
+            quantity,
+            previous_quantity,
+            new_quantity,
+            reference_type,
+            reference_id,
+            reason,
+            created_by
+          )
+
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        [
+          ingredientId,
+          locationId,
+          movementType,
+          quantity,
+          previousQuantity,
+          newQuantity,
+          referenceType,
+          referenceId,
+          reason,
+          createdBy
+        ]
+      );
 
     await connection.commit();
+
+
+    // -----------------------------------------------------
+    // Emit event AFTER successful transaction
+    // -----------------------------------------------------
 
     eventBus.emit(
       EVENTS.STOCK_UPDATED,
       {
         ingredientId,
-        movementId: movement.insertId,
+        locationId,
+
+        movementId:
+          movement.insertId,
+
         movementType,
-        quantity: numericQuantity,
+
+        quantity:
+          Number(quantity),
+
         previousQuantity,
+
         newQuantity,
+
         createdBy
       }
     );
 
+
     return {
+
       ingredientId,
-      movementId: movement.insertId,
+
+      locationId,
+
+      movementId:
+        movement.insertId,
+
       movementType,
-      quantity: numericQuantity,
+
+      quantity:
+        Number(quantity),
+
       previousQuantity,
+
       newQuantity
+
     };
 
 
@@ -304,7 +575,6 @@ const updateStock = async ({
     await connection.rollback();
 
     throw error;
-
 
   } finally {
 
@@ -491,6 +761,7 @@ const checkLowStock = async (ingredientId) => {
 export {
     getInventory,
     getInventoryByIngredient,
+    createInventoryRecord,
     updateStock,
     getStockMovements,
     checkLowStock  
