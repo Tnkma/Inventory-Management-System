@@ -144,6 +144,192 @@ const getInventoryByIngredient = async (
 };
 
 
+
+// =========================================================
+// CREATE INVENTORY RECORD
+// =========================================================
+
+const createInventoryRecord = async ({
+  ingredientId,
+  locationId
+}) => {
+
+  const connection = await pool.getConnection();
+
+  try {
+
+    await connection.beginTransaction();
+
+    // -----------------------------------------------------
+    // Validate ingredient
+    // -----------------------------------------------------
+
+    const [ingredients] = await connection.query(
+      `
+        SELECT id
+        FROM ingredients
+        WHERE id = ?
+          AND is_active = TRUE
+        LIMIT 1
+      `,
+      [ingredientId]
+    );
+
+    if (ingredients.length === 0) {
+
+      const error = new Error(
+        "Ingredient not found"
+      );
+
+      error.statusCode = 404;
+
+      throw error;
+    }
+
+
+    // -----------------------------------------------------
+    // Validate location
+    // -----------------------------------------------------
+
+    const [locations] = await connection.query(
+      `
+        SELECT id
+        FROM inventory_locations
+        WHERE id = ?
+          AND is_active = TRUE
+        LIMIT 1
+      `,
+      [locationId]
+    );
+
+    if (locations.length === 0) {
+
+      const error = new Error(
+        "Inventory location not found"
+      );
+
+      error.statusCode = 404;
+
+      throw error;
+    }
+
+
+    // -----------------------------------------------------
+    // Check existing inventory record
+    // -----------------------------------------------------
+
+    const [existing] = await connection.query(
+      `
+        SELECT id
+        FROM inventory
+        WHERE ingredient_id = ?
+          AND location_id = ?
+        LIMIT 1
+      `,
+      [
+        ingredientId,
+        locationId
+      ]
+    );
+
+
+    if (existing.length > 0) {
+
+      const error = new Error(
+        "Inventory record already exists for this location"
+      );
+
+      error.statusCode = 409;
+
+      throw error;
+    }
+
+
+    // -----------------------------------------------------
+    // Create inventory record
+    // -----------------------------------------------------
+
+    const [result] = await connection.query(
+      `
+        INSERT INTO inventory
+        (
+          ingredient_id,
+          location_id,
+          current_quantity,
+          reserved_quantity
+        )
+        VALUES (?, ?, 0, 0)
+      `,
+      [
+        ingredientId,
+        locationId
+      ]
+    );
+
+
+    // -----------------------------------------------------
+    // Get created record
+    // -----------------------------------------------------
+
+    const [inventory] = await connection.query(
+      `
+        SELECT
+          inv.id,
+          inv.ingredient_id,
+          inv.location_id,
+
+          i.name AS ingredient,
+          i.sku,
+          i.unit,
+
+          loc.name AS location,
+
+          inv.current_quantity,
+          inv.reserved_quantity,
+
+          (
+            inv.current_quantity -
+            inv.reserved_quantity
+          ) AS available_quantity,
+
+          inv.last_stock_update,
+          inv.created_at,
+          inv.updated_at
+
+        FROM inventory inv
+
+        INNER JOIN ingredients i
+          ON inv.ingredient_id = i.id
+
+        INNER JOIN inventory_locations loc
+          ON inv.location_id = loc.id
+
+        WHERE inv.id = ?
+
+        LIMIT 1
+      `,
+      [result.insertId]
+    );
+
+
+    await connection.commit();
+
+    return inventory[0];
+
+  } catch (error) {
+
+    await connection.rollback();
+
+    throw error;
+
+  } finally {
+
+    connection.release();
+
+  }
+};
+
+
 // =========================================================
 // UPDATE STOCK
 // =========================================================
@@ -575,6 +761,7 @@ const checkLowStock = async (ingredientId) => {
 export {
     getInventory,
     getInventoryByIngredient,
+    createInventoryRecord,
     updateStock,
     getStockMovements,
     checkLowStock  

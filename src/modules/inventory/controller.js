@@ -1,6 +1,7 @@
 import {
   getInventory,
   getInventoryByIngredient,
+  createInventoryRecord,
   updateStock,
   getStockMovements,
   checkLowStock
@@ -243,11 +244,79 @@ const checkIngredientLowStock = async (
   }
 };
 
+// =========================================================
+// CREATE INVENTORY RECORD
+// =========================================================
+
+const createInventory = async (
+  req,
+  res,
+  next
+) => {
+
+  try {
+
+    const {
+      ingredientId,
+      locationId
+    } = req.body;
+
+
+    if (!ingredientId) {
+
+      const error = new Error(
+        "ingredientId is required"
+      );
+
+      error.statusCode = 400;
+
+      throw error;
+    }
+
+
+    if (!locationId) {
+
+      const error = new Error(
+        "locationId is required"
+      );
+
+      error.statusCode = 400;
+
+      throw error;
+    }
+
+
+    const inventory =
+      await createInventoryRecord({
+        ingredientId,
+        locationId
+      });
+
+
+    res.status(201).json({
+
+      success: true,
+
+      message:
+        "Inventory record created successfully",
+
+      data: inventory
+
+    });
+
+  } catch (error) {
+
+    next(error);
+
+  }
+};
+
 
 export {
   getAllInventory,
   getInventoryItem,
   updateIngredientStock,
   getStockMovementHistory,
-  checkIngredientLowStock
+  checkIngredientLowStock,
+  createInventory
 };

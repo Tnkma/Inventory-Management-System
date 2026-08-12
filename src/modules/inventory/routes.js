@@ -9,7 +9,8 @@ import {
   getInventoryItem,
   updateIngredientStock,
   getStockMovementHistory,
-  checkIngredientLowStock
+  checkIngredientLowStock,
+  createInventory
 } from "./controller.js";
 
 
@@ -72,6 +73,17 @@ router.patch(
     "STORE_KEEPER"
   ),
   updateIngredientStock
+);
+
+
+router.post(
+  "/",
+  authorizeRoles(
+    "ADMIN",
+    "MANAGER",
+    "STORE_KEEPER"
+  ),
+  createInventory
 );
 
 export default router;
