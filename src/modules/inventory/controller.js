@@ -116,13 +116,13 @@ const updateIngredientStock = async (
 
 
     // -----------------------------------------------------
-    // Validate locationId
+    // PURCHASE movements must come through purchases
     // -----------------------------------------------------
 
-    if (!locationId) {
+    if (movementType === "PURCHASE") {
 
       const error = new Error(
-        "locationId is required"
+        "Purchase stock must be received through the purchase module"
       );
 
       error.statusCode = 400;

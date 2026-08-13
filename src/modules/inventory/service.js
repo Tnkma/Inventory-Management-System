@@ -42,6 +42,87 @@ const getInventory = async () => {
 
         inv.last_stock_update,
 
+        /*
+          ---------------------------------------------------
+          LAST SUPPLIER
+
+          Supplier is not stored directly on inventory.
+
+          We trace:
+
+          inventory
+              ↓
+          stock_movements
+              ↓
+          purchase
+              ↓
+          supplier
+          ---------------------------------------------------
+        */
+
+        (
+          SELECT s.name
+
+          FROM stock_movements sm
+
+          INNER JOIN purchases p
+            ON sm.reference_type = 'PURCHASE'
+            AND sm.reference_id = p.id
+
+          INNER JOIN suppliers s
+            ON p.supplier_id = s.id
+
+          WHERE sm.ingredient_id = inv.ingredient_id
+            AND sm.location_id = inv.location_id
+            AND sm.movement_type = 'PURCHASE'
+
+          ORDER BY
+            sm.created_at DESC,
+            sm.id DESC
+
+          LIMIT 1
+        ) AS last_supplier,
+
+        (
+          SELECT p.id
+
+          FROM stock_movements sm
+
+          INNER JOIN purchases p
+            ON sm.reference_type = 'PURCHASE'
+            AND sm.reference_id = p.id
+
+          WHERE sm.ingredient_id = inv.ingredient_id
+            AND sm.location_id = inv.location_id
+            AND sm.movement_type = 'PURCHASE'
+
+          ORDER BY
+            sm.created_at DESC,
+            sm.id DESC
+
+          LIMIT 1
+        ) AS last_purchase_id,
+
+        (
+          SELECT p.purchase_date
+
+          FROM stock_movements sm
+
+          INNER JOIN purchases p
+            ON sm.reference_type = 'PURCHASE'
+            AND sm.reference_id = p.id
+
+          WHERE sm.ingredient_id = inv.ingredient_id
+            AND sm.location_id = inv.location_id
+            AND sm.movement_type = 'PURCHASE'
+
+          ORDER BY
+            sm.created_at DESC,
+            sm.id DESC
+
+          LIMIT 1
+        ) AS last_purchase_date,
+
         inv.created_at,
         inv.updated_at
 
@@ -105,6 +186,69 @@ const getInventoryByIngredient = async (
 
         inv.last_stock_update,
 
+        (
+          SELECT s.name
+
+          FROM stock_movements sm
+
+          INNER JOIN purchases p
+            ON sm.reference_type = 'PURCHASE'
+            AND sm.reference_id = p.id
+
+          INNER JOIN suppliers s
+            ON p.supplier_id = s.id
+
+          WHERE sm.ingredient_id = inv.ingredient_id
+            AND sm.location_id = inv.location_id
+            AND sm.movement_type = 'PURCHASE'
+
+          ORDER BY
+            sm.created_at DESC,
+            sm.id DESC
+
+          LIMIT 1
+        ) AS last_supplier,
+
+        (
+          SELECT p.id
+
+          FROM stock_movements sm
+
+          INNER JOIN purchases p
+            ON sm.reference_type = 'PURCHASE'
+            AND sm.reference_id = p.id
+
+          WHERE sm.ingredient_id = inv.ingredient_id
+            AND sm.location_id = inv.location_id
+            AND sm.movement_type = 'PURCHASE'
+
+          ORDER BY
+            sm.created_at DESC,
+            sm.id DESC
+
+          LIMIT 1
+        ) AS last_purchase_id,
+
+        (
+          SELECT p.purchase_date
+
+          FROM stock_movements sm
+
+          INNER JOIN purchases p
+            ON sm.reference_type = 'PURCHASE'
+            AND sm.reference_id = p.id
+
+          WHERE sm.ingredient_id = inv.ingredient_id
+            AND sm.location_id = inv.location_id
+            AND sm.movement_type = 'PURCHASE'
+
+          ORDER BY
+            sm.created_at DESC,
+            sm.id DESC
+
+          LIMIT 1
+        ) AS last_purchase_date,
+
         inv.created_at,
         inv.updated_at
 
@@ -142,7 +286,6 @@ const getInventoryByIngredient = async (
 
   return inventory[0];
 };
-
 
 
 // =========================================================
@@ -590,6 +733,7 @@ const updateStock = async ({
 
 const getStockMovements = async ({
   ingredientId = null,
+  locationId = null,
   movementType = null
 } = {}) => {
 
@@ -597,11 +741,15 @@ const getStockMovements = async ({
     SELECT
 
       sm.id,
+
       sm.ingredient_id,
 
       i.name AS ingredient,
       i.sku,
       i.unit,
+
+      sm.location_id,
+      loc.name AS location,
 
       sm.movement_type,
       sm.quantity,
@@ -629,6 +777,9 @@ const getStockMovements = async ({
     INNER JOIN ingredients i
       ON sm.ingredient_id = i.id
 
+    INNER JOIN inventory_locations loc
+      ON sm.location_id = loc.id
+
     LEFT JOIN users u
       ON sm.created_by = u.id
 
@@ -638,7 +789,10 @@ const getStockMovements = async ({
   const params = [];
 
 
-  // Filter by ingredient
+  // -----------------------------------------------------
+  // Ingredient
+  // -----------------------------------------------------
+
   if (ingredientId) {
 
     query += `
@@ -649,7 +803,24 @@ const getStockMovements = async ({
   }
 
 
-  // Filter by movement type
+  // -----------------------------------------------------
+  // Location
+  // -----------------------------------------------------
+
+  if (locationId) {
+
+    query += `
+      AND sm.location_id = ?
+    `;
+
+    params.push(locationId);
+  }
+
+
+  // -----------------------------------------------------
+  // Movement type
+  // -----------------------------------------------------
+
   if (movementType) {
 
     query += `
@@ -661,7 +832,9 @@ const getStockMovements = async ({
 
 
   query += `
-    ORDER BY sm.created_at DESC, sm.id DESC
+    ORDER BY
+      sm.created_at DESC,
+      sm.id DESC
   `;
 
 

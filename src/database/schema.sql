@@ -263,9 +263,17 @@ CREATE TABLE purchases (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
 
     supplier_id INT UNSIGNED NOT NULL,
+
+    -- User who submitted the purchase / stock receipt
     user_id INT UNSIGNED NOT NULL,
 
+    -- User who approved the purchase
+    approved_by INT UNSIGNED NULL,
+
     purchase_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    -- When the purchase was approved/received
+    approved_at DATETIME NULL,
 
     status ENUM(
         'PENDING',
@@ -278,8 +286,14 @@ CREATE TABLE purchases (
     notes TEXT,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP,
+
+
+    -- =====================================================
+    -- FOREIGN KEYS
+    -- =====================================================
 
     CONSTRAINT fk_purchases_supplier
         FOREIGN KEY (supplier_id)
@@ -293,10 +307,28 @@ CREATE TABLE purchases (
         ON UPDATE CASCADE
         ON DELETE RESTRICT,
 
+    CONSTRAINT fk_purchases_approved_by
+        FOREIGN KEY (approved_by)
+        REFERENCES users(id)
+        ON UPDATE CASCADE
+        ON DELETE SET NULL,
+
+
+    -- =====================================================
+    -- INDEXES
+    -- =====================================================
+
     INDEX idx_purchases_supplier (supplier_id),
+
     INDEX idx_purchases_user (user_id),
+
+    INDEX idx_purchases_approved_by (approved_by),
+
     INDEX idx_purchases_date (purchase_date),
-    INDEX idx_purchases_status (status)
+
+    INDEX idx_purchases_status (status),
+
+    INDEX idx_purchases_approved_at (approved_at)
 );
 
 

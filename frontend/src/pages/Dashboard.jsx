@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import {
   Package,
@@ -7,38 +8,39 @@ import {
   Bell,
   ArrowUpRight,
   ArrowDownRight,
-  Activity,
   Boxes,
   Plus,
   ChevronRight,
   RefreshCw,
   XCircle,
+  CheckCircle2,
 } from "lucide-react";
 
-import { useNavigate } from "react-router-dom";
-
 import api from "../services/api";
-
+import AddStockModal from "../components/AddStockModal";
 
 const Dashboard = () => {
   const navigate = useNavigate();
 
+  // ===== STATE =====
   const [inventory, setInventory] = useState([]);
   const [movements, setMovements] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [notifications, setNotifications] = useState([]);
 
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [showAddStock, setShowAddStock] = useState(false);
 
-
-  // =====================================================
-  // LOAD DASHBOARD DATA
-  // =====================================================
-
-  const loadDashboard = async () => {
+  // ===== FETCH DASHBOARD DATA =====
+  const fetchDashboardData = async (showInitialLoading = true) => {
     try {
-      setLoading(true);
+      if (showInitialLoading) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
       setError("");
 
       const results = await Promise.allSettled([
@@ -48,1114 +50,532 @@ const Dashboard = () => {
         api.get("/notifications"),
       ]);
 
+      const [inventoryResult, movementsResult, purchasesResult, notificationsResult] = results;
 
-      // -------------------------------------------------
-      // INVENTORY
-      // -------------------------------------------------
-
-      if (results[0].status === "fulfilled") {
-        setInventory(
-          results[0].value.data?.data || []
-        );
+      if (inventoryResult.status === "fulfilled") {
+        setInventory(inventoryResult.value.data?.data || []);
       } else {
-        console.error(
-          "Failed to load inventory:",
-          results[0].reason
-        );
+        console.error("Failed to load inventory:", inventoryResult.reason);
       }
 
-
-      // -------------------------------------------------
-      // STOCK MOVEMENTS
-      // -------------------------------------------------
-
-      if (results[1].status === "fulfilled") {
-        setMovements(
-          results[1].value.data?.data || []
-        );
+      if (movementsResult.status === "fulfilled") {
+        setMovements(movementsResult.value.data?.data || []);
       } else {
-        console.error(
-          "Failed to load stock movements:",
-          results[1].reason
-        );
+        console.error("Failed to load stock movements:", movementsResult.reason);
       }
 
-
-      // -------------------------------------------------
-      // PURCHASES
-      // -------------------------------------------------
-
-      if (results[2].status === "fulfilled") {
-        setPurchases(
-          results[2].value.data?.data || []
-        );
+      if (purchasesResult.status === "fulfilled") {
+        setPurchases(purchasesResult.value.data?.data || []);
       } else {
-        console.error(
-          "Failed to load purchases:",
-          results[2].reason
-        );
+        console.error("Failed to load purchases:", purchasesResult.reason);
       }
 
-
-      // -------------------------------------------------
-      // NOTIFICATIONS
-      // -------------------------------------------------
-
-      if (results[3].status === "fulfilled") {
-        setNotifications(
-          results[3].value.data?.data || []
-        );
+      if (notificationsResult.status === "fulfilled") {
+        setNotifications(notificationsResult.value.data?.data || []);
       } else {
-        console.error(
-          "Failed to load notifications:",
-          results[3].reason
-        );
+        console.error("Failed to load notifications:", notificationsResult.reason);
       }
 
-
-      // -------------------------------------------------
-      // ONLY SHOW ERROR IF INVENTORY FAILED
-      // -------------------------------------------------
-
-      if (results[0].status === "rejected") {
+      if (inventoryResult.status === "rejected") {
         setError(
-          results[0].reason?.response?.data?.message ||
-            "Unable to load dashboard data."
+          inventoryResult.reason?.response?.data?.message ||
+            "Unable to load dashboard inventory data."
         );
       }
-
     } catch (err) {
-      console.error(
-        "Dashboard loading error:",
-        err
-      );
-
-      setError(
-        err.response?.data?.message ||
-          "Unable to load dashboard."
-      );
+      console.error("Dashboard loading error:", err);
+      setError(err.response?.data?.message || "Unable to load dashboard data.");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-
   useEffect(() => {
-    loadDashboard();
+    fetchDashboardData(true);
   }, []);
 
-
-  // =====================================================
-  // UNIQUE INGREDIENTS
-  // =====================================================
-
-  const uniqueIngredients = useMemo(() => {
-    const ids = new Set();
-
-    inventory.forEach((item) => {
-      if (item.ingredient_id !== undefined) {
-        ids.add(item.ingredient_id);
-      }
-    });
-
-    return ids;
-  }, [inventory]);
-
-
-  // =====================================================
-  // STOCK STATUS
-  // =====================================================
-
+  // ===== STOCK STATUS =====
   const getStockStatus = (item) => {
-    const available = Number(
-      item.available_quantity ?? 0
-    );
+    const available = Number(item.available_quantity ?? 0);
+    const minimum = Number(item.minimum_stock ?? 0);
+    const reorder = Number(item.reorder_level ?? 0);
 
-    const minimum = Number(
-      item.minimum_stock ?? 0
-    );
-
-    const reorder = Number(
-      item.reorder_level ?? 0
-    );
-
-    if (available <= 0) {
-      return "OUT_OF_STOCK";
-    }
-
-    if (available <= minimum) {
-      return "CRITICAL";
-    }
-
-    if (available <= reorder) {
-      return "LOW";
-    }
-
+    if (available <= 0) return "OUT_OF_STOCK";
+    if (available <= minimum) return "CRITICAL";
+    if (available <= reorder) return "LOW";
     return "HEALTHY";
   };
 
-
-  // =====================================================
-  // LOW STOCK
-  // =====================================================
-
-  const lowStockItems = useMemo(() => {
-    return inventory
-      .filter((item) => {
-        const status =
-          getStockStatus(item);
-
-        return (
-          status === "LOW" ||
-          status === "CRITICAL" ||
-          status === "OUT_OF_STOCK"
-        );
-      })
-      .sort(
-        (a, b) =>
-          Number(a.available_quantity ?? 0) -
-          Number(b.available_quantity ?? 0)
-      )
-      .slice(0, 5);
-  }, [inventory]);
-
-
-  // =====================================================
-  // STOCK SUMMARY
-  // =====================================================
-
-  const stockSummary = useMemo(() => {
-    let available = 0;
-    let reserved = 0;
+  // ===== INVENTORY SUMMARY =====
+  const inventorySummary = useMemo(() => {
     let healthy = 0;
     let low = 0;
     let critical = 0;
     let outOfStock = 0;
+    let availableQuantity = 0;
+    let reservedQuantity = 0;
 
     inventory.forEach((item) => {
-      available += Number(
-        item.available_quantity ?? 0
-      );
+      const status = getStockStatus(item);
 
-      reserved += Number(
-        item.reserved_quantity ?? 0
-      );
+      if (status === "HEALTHY") healthy += 1;
+      if (status === "LOW") low += 1;
+      if (status === "CRITICAL") critical += 1;
+      if (status === "OUT_OF_STOCK") outOfStock += 1;
 
-      const status =
-        getStockStatus(item);
-
-      if (status === "HEALTHY") {
-        healthy++;
-      }
-
-      if (status === "LOW") {
-        low++;
-      }
-
-      if (status === "CRITICAL") {
-        critical++;
-      }
-
-      if (status === "OUT_OF_STOCK") {
-        outOfStock++;
-      }
+      availableQuantity += Number(item.available_quantity ?? 0);
+      reservedQuantity += Number(item.reserved_quantity ?? 0);
     });
 
     return {
-      available,
-      reserved,
+      total: inventory.length,
       healthy,
       low,
       critical,
       outOfStock,
+      attention: low + critical,
+      availableQuantity,
+      reservedQuantity,
     };
   }, [inventory]);
 
+  // ===== LOW STOCK ITEMS =====
+  const lowStockItems = useMemo(() => {
+    return inventory
+      .filter((item) => {
+        const status = getStockStatus(item);
+        return status === "LOW" || status === "CRITICAL" || status === "OUT_OF_STOCK";
+      })
+      .sort((a, b) => Number(a.available_quantity ?? 0) - Number(b.available_quantity ?? 0))
+      .slice(0, 5);
+  }, [inventory]);
 
-  // =====================================================
-  // PENDING PURCHASES
-  // =====================================================
-
+  // ===== PENDING PURCHASES =====
   const pendingPurchases = useMemo(() => {
-    return purchases.filter(
-      (purchase) =>
-        String(
-          purchase.status || ""
-        ).toUpperCase() === "PENDING"
-    ).length;
+    return purchases.filter((p) => String(p.status || "").toUpperCase() === "PENDING").length;
   }, [purchases]);
 
-
-  // =====================================================
-  // UNREAD NOTIFICATIONS
-  // =====================================================
-
+  // ===== UNREAD NOTIFICATIONS =====
   const unreadNotifications = useMemo(() => {
-    return notifications.filter(
-      (notification) =>
-        notification.is_read === false ||
-        Number(notification.is_read) === 0
-    ).length;
+    return notifications.filter((n) => !n.is_read).length;
   }, [notifications]);
 
-
-  // =====================================================
-  // RECENT ACTIVITY
-  // =====================================================
-
+  // ===== RECENT ACTIVITY =====
   const recentActivity = useMemo(() => {
-    return movements
-      .slice()
-      .sort((a, b) => {
-        return (
-          new Date(b.created_at) -
-          new Date(a.created_at)
-        );
-      })
+    return [...movements]
+      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
       .slice(0, 6);
   }, [movements]);
 
+  // ===== TIME FORMATTER =====
+  const formatRelativeTime = (dateValue) => {
+    if (!dateValue) return "Recently";
 
-  // =====================================================
-  // ACTIVITY LABEL
-  // =====================================================
+    const date = new Date(dateValue);
+    if (Number.isNaN(date.getTime())) return "Recently";
 
-  const getMovementLabel = (type) => {
-    switch (String(type || "").toUpperCase()) {
-      case "PURCHASE":
-        return "Purchase";
+    const now = new Date();
+    const difference = Math.floor((now.getTime() - date.getTime()) / 1000);
 
-      case "CONSUMPTION":
-        return "Consumption";
+    if (difference < 60) return "Just now";
 
-      case "TRANSFER":
-        return "Transfer";
+    const minutes = Math.floor(difference / 60);
+    if (minutes < 60) return `${minutes}m ago`;
 
-      case "WASTAGE":
-        return "Wastage";
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
 
-      case "ADJUSTMENT":
-        return "Adjustment";
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d ago`;
 
-      case "RETURN":
-        return "Return";
-
-      default:
-        return type || "Movement";
-    }
+    return date.toLocaleDateString(undefined, { day: "numeric", month: "short" });
   };
 
-
-  // =====================================================
-  // ACTIVITY POSITIVE / NEGATIVE
-  // =====================================================
-
-  const isPositiveMovement = (type) => {
-    const positiveTypes = [
-      "PURCHASE",
-      "RETURN",
-    ];
-
-    return positiveTypes.includes(
-      String(type || "").toUpperCase()
-    );
+  // ===== MOVEMENT HELPERS =====
+  const isPositiveMovement = (movementType) => {
+    const type = String(movementType || "").toUpperCase();
+    return type === "PURCHASE" || type === "RETURN";
   };
 
+  const getMovementIcon = (movementType) => (isPositiveMovement(movementType) ? ArrowUpRight : ArrowDownRight);
 
-  // =====================================================
-  // TIME AGO
-  // =====================================================
+  const currentDate = new Date().toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
 
-  const timeAgo = (date) => {
-    if (!date) {
-      return "";
-    }
-
-    const timestamp =
-      new Date(date).getTime();
-
-    if (Number.isNaN(timestamp)) {
-      return "";
-    }
-
-    const seconds = Math.floor(
-      (Date.now() - timestamp) / 1000
+  // ===== LOADING STATE =====
+  if (loading) {
+    return (
+      <div className="min-h-full bg-white">
+        <div className="flex min-h-[500px] items-center justify-center">
+          <div className="text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+              <RefreshCw size={20} className="animate-spin" />
+            </div>
+            <p className="mt-4 text-sm font-semibold text-slate-700">Loading dashboard</p>
+            <p className="mt-1 text-xs text-slate-400">Fetching your latest inventory data...</p>
+          </div>
+        </div>
+      </div>
     );
+  }
 
-    if (seconds < 60) {
-      return "Just now";
-    }
+  // ===== STAT CARD CONFIG =====
+  const statCards = [
+    {
+      key: "total",
+      label: "Total Ingredients",
+      value: inventorySummary.total,
+      caption: "Currently tracked in inventory",
+      badge: "Active",
+      icon: Package,
+      color: "blue",
+    },
+    {
+      key: "attention",
+      label: "Low Stock",
+      value: inventorySummary.attention,
+      caption: `${inventorySummary.outOfStock} out of stock`,
+      badge: "Attention",
+      icon: AlertTriangle,
+      color: "amber",
+    },
+    {
+      key: "purchases",
+      label: "Pending Purchases",
+      value: pendingPurchases,
+      caption: "Awaiting confirmation",
+      badge: "Pending",
+      icon: ShoppingCart,
+      color: "violet",
+    },
+    {
+      key: "notifications",
+      label: "Notifications",
+      value: unreadNotifications,
+      caption: "Requiring your attention",
+      badge: "Unread",
+      icon: Bell,
+      color: "rose",
+    },
+  ];
 
-    const minutes = Math.floor(
-      seconds / 60
-    );
-
-    if (minutes < 60) {
-      return `${minutes} min ago`;
-    }
-
-    const hours = Math.floor(
-      minutes / 60
-    );
-
-    if (hours < 24) {
-      return `${hours} hr ago`;
-    }
-
-    const days = Math.floor(
-      hours / 24
-    );
-
-    if (days < 7) {
-      return `${days} day${days === 1 ? "" : "s"} ago`;
-    }
-
-    return new Date(date).toLocaleDateString();
+  const colorClasses = {
+    blue: { bg: "bg-blue-50", text: "text-blue-600" },
+    amber: { bg: "bg-amber-50", text: "text-amber-600" },
+    violet: { bg: "bg-violet-50", text: "text-violet-600" },
+    rose: { bg: "bg-rose-50", text: "text-rose-600" },
   };
 
+  const healthPct = inventorySummary.total > 0 ? (inventorySummary.healthy / inventorySummary.total) * 100 : 0;
+  const lowPct = inventorySummary.total > 0 ? (inventorySummary.low / inventorySummary.total) * 100 : 0;
+  const criticalPct = inventorySummary.total > 0 ? (inventorySummary.critical / inventorySummary.total) * 100 : 0;
+  const outOfStockPct = inventorySummary.total > 0 ? (inventorySummary.outOfStock / inventorySummary.total) * 100 : 0;
 
-  // =====================================================
-  // STOCK CHART
-  // =====================================================
-
-  const chartData = useMemo(() => {
-    return inventory
-      .slice(0, 12)
-      .map((item) => {
-        const current =
-          Number(item.available_quantity ?? 0);
-
-        const reorder =
-          Number(item.reorder_level ?? 0);
-
-        if (reorder <= 0) {
-          return 50;
-        }
-
-        const percentage =
-          (current / reorder) * 50;
-
-        return Math.min(
-          100,
-          Math.max(12, percentage)
-        );
-      });
-  }, [inventory]);
-
-
-  // =====================================================
-  // RENDER
-  // =====================================================
-
+  // ===== MAIN RENDER =====
   return (
     <div className="min-h-full bg-white text-slate-900">
-
-
-      {/* =================================================
-          PAGE HEADER
-      ================================================= */}
-
-      <div className="mb-7 flex items-center justify-between">
-
+      {/* PAGE HEADER */}
+      <div className="mb-7 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Overview
-          </h1>
-
-          <p className="mt-1 text-sm text-slate-500">
-            Monitor your restaurant inventory and stock activity.
-          </p>
-
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Overview</h1>
+            {refreshing && <RefreshCw size={15} className="animate-spin text-blue-500" />}
+          </div>
+          <p className="mt-1 text-sm text-slate-500">Monitor your restaurant inventory and stock activity.</p>
+          <p className="mt-1.5 text-xs font-medium text-slate-400">{currentDate}</p>
         </div>
 
-
-        <div className="hidden items-center gap-3 sm:flex">
-
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() =>
-              navigate("/inventory")
-            }
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 shadow-sm transition-all hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+            onClick={() => fetchDashboardData(false)}
+            disabled={refreshing}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-600 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <Activity size={17} />
-
-            Activity
+            <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
+            Refresh
           </button>
 
-
           <button
             type="button"
-            onClick={() =>
-              navigate("/inventory")
-            }
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition-all hover:bg-blue-700 hover:shadow-md"
+            onClick={() => setShowAddStock(true)}
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition hover:bg-blue-700 hover:shadow-md"
           >
             <Plus size={17} />
-
             Add Stock
           </button>
-
         </div>
-
       </div>
 
-
-      {/* =================================================
-          ERROR
-      ================================================= */}
-
+      {/* ERROR */}
       {error && (
-
-        <div className="mb-6 flex items-center justify-between gap-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3">
-
-          <div className="flex items-center gap-3">
-
-            <XCircle
-              size={19}
-              className="text-red-600"
-            />
-
-            <p className="text-sm font-medium text-red-700">
-              {error}
-            </p>
-
+        <div className="mb-6 flex items-start gap-3 rounded-2xl border border-red-100 bg-red-50 px-4 py-3.5">
+          <XCircle size={18} className="mt-0.5 shrink-0 text-red-500" />
+          <div>
+            <p className="text-sm font-semibold text-red-700">Dashboard data could not be fully loaded</p>
+            <p className="mt-0.5 text-xs text-red-600">{error}</p>
           </div>
-
-
-          <button
-            type="button"
-            onClick={loadDashboard}
-            className="rounded-xl px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100"
-          >
-            Retry
-          </button>
-
         </div>
-
       )}
 
-
-      {/* =================================================
-          STATISTICS
-      ================================================= */}
-
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-
-        {/* TOTAL INGREDIENTS */}
-
-        <div className="group rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-slate-300 hover:shadow-lg">
-
-          <div className="flex items-start justify-between">
-
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
-              <Package size={21} />
+      {/* STATISTICS */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {statCards.map(({ key, label, value, caption, badge, icon: Icon, color }) => (
+          <div
+            key={key}
+            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <div className="flex items-start justify-between">
+              <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${colorClasses[color].bg} ${colorClasses[color].text}`}>
+                <Icon size={19} />
+              </div>
+              <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${colorClasses[color].bg} ${colorClasses[color].text}`}>
+                {badge}
+              </span>
             </div>
 
-            <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-600">
-              Inventory
-            </span>
-
-          </div>
-
-
-          <div className="mt-5">
-
-            <p className="text-sm font-medium text-slate-500">
-              Total Ingredients
-            </p>
-
-            <p className="mt-1 text-3xl font-bold tracking-tight text-slate-900">
-              {loading
-                ? "—"
-                : uniqueIngredients.size}
-            </p>
-
-            <p className="mt-2 text-xs text-slate-400">
-              Active ingredients
-            </p>
-
-          </div>
-
-        </div>
-
-
-        {/* LOW STOCK */}
-
-        <div className="group rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-slate-300 hover:shadow-lg">
-
-          <div className="flex items-start justify-between">
-
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
-              <AlertTriangle size={21} />
+            <div className="mt-5">
+              <p className="text-xs font-medium text-slate-500">{label}</p>
+              <p className="mt-1 text-3xl font-bold tracking-tight text-slate-900">{value}</p>
+              <p className="mt-1.5 text-xs text-slate-400">{caption}</p>
             </div>
-
-            <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-600">
-              Attention
-            </span>
-
           </div>
-
-
-          <div className="mt-5">
-
-            <p className="text-sm font-medium text-slate-500">
-              Low Stock
-            </p>
-
-            <p className="mt-1 text-3xl font-bold tracking-tight text-slate-900">
-              {loading
-                ? "—"
-                : stockSummary.low +
-                  stockSummary.critical +
-                  stockSummary.outOfStock}
-            </p>
-
-            <p className="mt-2 text-xs text-slate-400">
-              Items need attention
-            </p>
-
-          </div>
-
-        </div>
-
-
-        {/* PENDING PURCHASES */}
-
-        <div className="group rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-slate-300 hover:shadow-lg">
-
-          <div className="flex items-start justify-between">
-
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-50 text-violet-600">
-              <ShoppingCart size={21} />
-            </div>
-
-            <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-600">
-              Purchases
-            </span>
-
-          </div>
-
-
-          <div className="mt-5">
-
-            <p className="text-sm font-medium text-slate-500">
-              Pending Purchases
-            </p>
-
-            <p className="mt-1 text-3xl font-bold tracking-tight text-slate-900">
-              {loading
-                ? "—"
-                : pendingPurchases}
-            </p>
-
-            <p className="mt-2 text-xs text-slate-400">
-              Awaiting confirmation
-            </p>
-
-          </div>
-
-        </div>
-
-
-        {/* NOTIFICATIONS */}
-
-        <div className="group rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-slate-300 hover:shadow-lg">
-
-          <div className="flex items-start justify-between">
-
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
-              <Bell size={21} />
-            </div>
-
-            <span className="rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-600">
-              Alerts
-            </span>
-
-          </div>
-
-
-          <div className="mt-5">
-
-            <p className="text-sm font-medium text-slate-500">
-              Notifications
-            </p>
-
-            <p className="mt-1 text-3xl font-bold tracking-tight text-slate-900">
-              {loading
-                ? "—"
-                : unreadNotifications}
-            </p>
-
-            <p className="mt-2 text-xs text-slate-400">
-              Unread notifications
-            </p>
-
-          </div>
-
-        </div>
-
+        ))}
       </div>
 
-
-      {/* =================================================
-          MAIN CONTENT
-      ================================================= */}
-
-      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
-
-
-        {/* =================================================
-            STOCK OVERVIEW
-        ================================================= */}
-
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm xl:col-span-2">
-
+      {/* STOCK OVERVIEW + LOW STOCK */}
+      <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-3">
+        {/* STOCK OVERVIEW */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
           <div className="flex items-center justify-between">
-
             <div>
-
-              <h2 className="font-semibold text-slate-900">
-                Stock Overview
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-500">
-                Current inventory health
-              </p>
-
+              <h2 className="text-sm font-semibold text-slate-900">Stock Overview</h2>
+              <p className="mt-1 text-xs text-slate-500">Current inventory health across your locations</p>
             </div>
-
-
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-              <Activity size={19} />
-            </div>
-
+            <button
+              type="button"
+              onClick={() => navigate("/inventory")}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 transition hover:text-blue-700"
+            >
+              View inventory
+              <ChevronRight size={14} />
+            </button>
           </div>
 
-
-          {/* STOCK SUMMARY */}
-
-          <div className="mt-7 grid grid-cols-1 gap-4 sm:grid-cols-3">
-
-            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
-
-              <p className="text-xs font-medium text-slate-500">
-                Available
-              </p>
-
-              <p className="mt-2 text-2xl font-bold text-slate-900">
-                {loading
-                  ? "—"
-                  : stockSummary.available.toLocaleString()}
-              </p>
-
-              <p className="mt-1 text-xs font-medium text-emerald-600">
-                Available stock
-              </p>
-
-            </div>
-
-
-            <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
-
-              <p className="text-xs font-medium text-slate-500">
-                Reserved
-              </p>
-
-              <p className="mt-2 text-2xl font-bold text-slate-900">
-                {loading
-                  ? "—"
-                  : stockSummary.reserved.toLocaleString()}
-              </p>
-
-              <p className="mt-1 text-xs font-medium text-blue-600">
-                Currently reserved
-              </p>
-
-            </div>
-
-
-            <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4">
-
-              <p className="text-xs font-medium text-slate-500">
-                Low Stock
-              </p>
-
-              <p className="mt-2 text-2xl font-bold text-slate-900">
-                {loading
-                  ? "—"
-                  : stockSummary.low +
-                    stockSummary.critical +
-                    stockSummary.outOfStock}
-              </p>
-
-              <p className="mt-1 text-xs font-medium text-amber-600">
-                Requires attention
-              </p>
-
-            </div>
-
-          </div>
-
-
-          {/* STOCK VISUAL */}
-
-          <div className="mt-6 flex h-40 items-end gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-5">
-
-            {chartData.length > 0 ? (
-
-              chartData.map((height, index) => (
-
-                <div
-                  key={index}
-                  className="flex-1 rounded-t-xl bg-gradient-to-t from-blue-200 to-blue-600 opacity-90 transition-all duration-300 hover:opacity-100"
-                  style={{
-                    height: `${height}%`,
-                  }}
-                />
-
-              ))
-
-            ) : (
-
-              <div className="flex w-full items-center justify-center text-sm text-slate-400">
-                No stock data available
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-4">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={15} className="text-emerald-600" />
+                <p className="text-xs font-medium text-slate-500">Healthy</p>
               </div>
+              <p className="mt-2 text-xl font-bold text-slate-900">{inventorySummary.healthy}</p>
+            </div>
 
-            )}
+            <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+              <p className="text-xs font-medium text-slate-500">Available Qty</p>
+              <p className="mt-2 text-xl font-bold text-slate-900">{inventorySummary.availableQuantity.toLocaleString()}</p>
+              <p className="mt-0.5 text-[11px] text-blue-600">Across inventory</p>
+            </div>
 
+            <div className="rounded-xl border border-violet-100 bg-violet-50/60 p-4">
+              <p className="text-xs font-medium text-slate-500">Reserved</p>
+              <p className="mt-2 text-xl font-bold text-slate-900">{inventorySummary.reservedQuantity.toLocaleString()}</p>
+              <p className="mt-0.5 text-[11px] text-violet-600">Currently reserved</p>
+            </div>
+
+            <div className="rounded-xl border border-red-100 bg-red-50/60 p-4">
+              <p className="text-xs font-medium text-slate-500">Critical</p>
+              <p className="mt-2 text-xl font-bold text-slate-900">{inventorySummary.critical}</p>
+              <p className="mt-0.5 text-[11px] text-red-600">Immediate attention</p>
+            </div>
           </div>
 
+          {/* STOCK HEALTH BAR */}
+          <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-slate-700">Inventory health</p>
+                <p className="mt-0.5 text-[11px] text-slate-400">Based on current available quantities</p>
+              </div>
+              <span className="text-xs font-semibold text-slate-600">{Math.round(healthPct)}%</span>
+            </div>
+
+            <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-slate-200">
+              {inventorySummary.total > 0 && (
+                <>
+                  <div className="h-full bg-emerald-500" style={{ width: `${healthPct}%` }} />
+                  <div className="h-full bg-amber-400" style={{ width: `${lowPct}%` }} />
+                  <div className="h-full bg-orange-500" style={{ width: `${criticalPct}%` }} />
+                  <div className="h-full bg-red-500" style={{ width: `${outOfStockPct}%` }} />
+                </>
+              )}
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
+              <div className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                <span className="text-[11px] text-slate-500">Healthy</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-amber-400" />
+                <span className="text-[11px] text-slate-500">Low</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-orange-500" />
+                <span className="text-[11px] text-slate-500">Critical</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-red-500" />
+                <span className="text-[11px] text-slate-500">Out of stock</span>
+              </div>
+            </div>
+          </div>
         </div>
 
-
-        {/* =================================================
-            LOW STOCK
-        ================================================= */}
-
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-
+        {/* LOW STOCK */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
-
             <div>
-
-              <h2 className="font-semibold text-slate-900">
-                Low Stock
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-500">
-                Items requiring attention
-              </p>
-
+              <h2 className="text-sm font-semibold text-slate-900">Low Stock</h2>
+              <p className="mt-1 text-xs text-slate-500">Items requiring attention</p>
             </div>
-
-
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-              <AlertTriangle size={19} />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+              <AlertTriangle size={17} />
             </div>
-
           </div>
 
-
-          <div className="mt-6 space-y-5">
-
+          <div className="mt-5">
             {lowStockItems.length === 0 ? (
-
-              <div className="rounded-2xl bg-emerald-50 p-4">
-
-                <p className="text-sm font-semibold text-emerald-700">
-                  Stock looks good
-                </p>
-
-                <p className="mt-1 text-xs text-emerald-600">
-                  No ingredients currently require attention.
-                </p>
-
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-4 py-5 text-center">
+                <CheckCircle2 size={22} className="mx-auto text-emerald-500" />
+                <p className="mt-2 text-xs font-semibold text-emerald-700">Inventory looks healthy</p>
+                <p className="mt-1 text-[11px] text-emerald-600">No items currently need attention.</p>
               </div>
-
             ) : (
+              <div className="space-y-4">
+                {lowStockItems.map((item) => {
+                  const available = Number(item.available_quantity ?? 0);
+                  const reorder = Number(item.reorder_level ?? 0);
+                  const percentage = reorder > 0 ? Math.min(100, Math.round((available / reorder) * 100)) : 0;
+                  const status = getStockStatus(item);
 
-              lowStockItems.map((item) => {
+                  const statusColor =
+                    status === "OUT_OF_STOCK" ? "text-red-600" : status === "CRITICAL" ? "text-orange-600" : "text-amber-600";
+                  const barColor =
+                    status === "OUT_OF_STOCK" ? "bg-red-500" : status === "CRITICAL" ? "bg-orange-500" : "bg-amber-400";
 
-                const current =
-                  Number(
-                    item.available_quantity ?? 0
-                  );
-
-                const reorder =
-                  Number(
-                    item.reorder_level ?? 0
-                  );
-
-                const percentage =
-                  reorder > 0
-                    ? Math.min(
-                        100,
-                        Math.round(
-                          (current / reorder) *
-                            100
-                        )
-                      )
-                    : 0;
-
-                return (
-
-                  <div key={item.id}>
-
-                    <div className="flex items-center justify-between">
-
-                      <div>
-
-                        <p className="text-sm font-semibold text-slate-800">
-                          {item.ingredient}
-                        </p>
-
-                        <p className="mt-1 text-xs text-slate-500">
-                          {current.toLocaleString()}{" "}
-                          {item.unit} /{" "}
-                          {reorder.toLocaleString()}{" "}
-                          {item.unit}
-                        </p>
-
+                  return (
+                    <div key={`${item.id}-${item.location_id}`}>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-semibold text-slate-800">
+                            {item.ingredient || item.name || "Unknown item"}
+                          </p>
+                          <p className="mt-0.5 truncate text-[11px] text-slate-400">
+                            {available.toLocaleString()} {item.unit || ""} · {item.location || "Unknown location"}
+                          </p>
+                        </div>
+                        <span className={`shrink-0 text-[11px] font-semibold ${statusColor}`}>
+                          {status === "OUT_OF_STOCK" ? "Out" : `${percentage}%`}
+                        </span>
                       </div>
 
-
-                      <span className="text-xs font-semibold text-amber-600">
-                        {percentage}%
-                      </span>
-
+                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                        <div className={`h-full rounded-full ${barColor}`} style={{ width: `${percentage}%` }} />
+                      </div>
                     </div>
-
-
-                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
-
-                      <div
-                        className="h-full rounded-full bg-amber-400"
-                        style={{
-                          width: `${percentage}%`,
-                        }}
-                      />
-
-                    </div>
-
-                  </div>
-
-                );
-              })
-
+                  );
+                })}
+              </div>
             )}
-
           </div>
-
 
           <button
             type="button"
-            onClick={() =>
-              navigate("/inventory")
-            }
-            className="mt-7 flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 py-3 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-100 hover:text-blue-600"
+            onClick={() => navigate("/inventory")}
+            className="mt-5 flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 py-2.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-blue-600"
           >
             View inventory
-
-            <ChevronRight size={16} />
-
+            <ChevronRight size={14} />
           </button>
-
         </div>
-
       </div>
 
-
-      {/* =================================================
-          RECENT ACTIVITY
-      ================================================= */}
-
-      <div className="mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-
+      {/* RECENT ACTIVITY */}
+      <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between">
-
           <div>
-
-            <h2 className="font-semibold text-slate-900">
-              Recent Activity
-            </h2>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Latest inventory movements
-            </p>
-
+            <h2 className="text-sm font-semibold text-slate-900">Recent Activity</h2>
+            <p className="mt-1 text-xs text-slate-500">Latest inventory movements</p>
           </div>
-
-
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
-            <Boxes size={19} />
-          </div>
-
+          <button
+            type="button"
+            onClick={() => navigate("/inventory")}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 transition hover:text-blue-700"
+          >
+            View all
+            <ChevronRight size={14} />
+          </button>
         </div>
 
-
-        <div className="mt-5 divide-y divide-slate-100">
-
+        <div className="mt-4 divide-y divide-slate-100">
           {recentActivity.length === 0 ? (
-
             <div className="py-10 text-center">
-
-              <Boxes
-                size={28}
-                className="mx-auto text-slate-300"
-              />
-
-              <p className="mt-3 text-sm font-medium text-slate-600">
-                No recent activity
-              </p>
-
-              <p className="mt-1 text-xs text-slate-400">
-                Stock movements will appear here.
-              </p>
-
+              <Boxes size={24} className="mx-auto text-slate-300" />
+              <p className="mt-3 text-xs font-semibold text-slate-600">No recent activity</p>
+              <p className="mt-1 text-[11px] text-slate-400">Stock movements will appear here.</p>
             </div>
-
           ) : (
-
             recentActivity.map((activity) => {
-
-              const positive =
-                isPositiveMovement(
-                  activity.movement_type
-                );
-
-              const quantity =
-                Number(
-                  activity.quantity ?? 0
-                );
+              const positive = isPositiveMovement(activity.movement_type);
+              const ActivityIcon = getMovementIcon(activity.movement_type);
+              const quantity = Number(activity.quantity ?? 0);
 
               return (
-
-                <div
-                  key={activity.id}
-                  className="flex items-center justify-between gap-4 py-4"
-                >
-
-                  <div className="flex min-w-0 items-center gap-4">
-
+                <div key={activity.id} className="flex items-center justify-between gap-4 py-3.5">
+                  <div className="flex min-w-0 items-center gap-3">
                     <div
-                      className={`
-                        flex
-                        h-10
-                        w-10
-                        shrink-0
-                        items-center
-                        justify-center
-                        rounded-xl
-                        ${
-                          positive
-                            ? "bg-emerald-50 text-emerald-600"
-                            : "bg-blue-50 text-blue-600"
-                        }
-                      `}
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                        positive ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-600"
+                      }`}
                     >
-
-                      {positive ? (
-                        <ArrowUpRight size={18} />
-                      ) : (
-                        <ArrowDownRight size={18} />
-                      )}
-
+                      <ActivityIcon size={17} />
                     </div>
-
 
                     <div className="min-w-0">
-
-                      <p className="truncate text-sm font-semibold text-slate-800">
-                        {activity.ingredient ||
-                          "Unknown ingredient"}
+                      <p className="truncate text-xs font-semibold text-slate-800">
+                        {activity.ingredient || "Inventory item"}
                       </p>
-
-                      <p className="mt-1 text-xs text-slate-500">
-                        {getMovementLabel(
-                          activity.movement_type
-                        )}
-
-                        {activity.location
-                          ? ` · ${activity.location}`
-                          : ""}
-
-                        {activity.created_by_name
-                          ? ` · ${activity.created_by_name}`
-                          : ""}
+                      <p className="mt-0.5 truncate text-[11px] text-slate-400">
+                        {String(activity.movement_type || "MOVEMENT").replace(/_/g, " ")} ·{" "}
+                        {activity.location || "Inventory"}
+                        {activity.created_by_name ? ` · ${activity.created_by_name}` : ""}
                       </p>
-
                     </div>
-
                   </div>
-
 
                   <div className="shrink-0 text-right">
-
-                    <p
-                      className={
-                        positive
-                          ? "text-sm font-semibold text-emerald-600"
-                          : "text-sm font-semibold text-slate-700"
-                      }
-                    >
+                    <p className={`text-xs font-semibold ${positive ? "text-emerald-600" : "text-slate-700"}`}>
                       {positive ? "+" : "-"}
-                      {quantity.toLocaleString()}{" "}
-                      {activity.unit || ""}
+                      {Math.abs(quantity).toLocaleString()} {activity.unit || ""}
                     </p>
-
-                    <p className="mt-1 text-xs text-slate-400">
-                      {timeAgo(
-                        activity.created_at
-                      )}
-                    </p>
-
+                    <p className="mt-0.5 text-[10px] text-slate-400">{formatRelativeTime(activity.created_at)}</p>
                   </div>
-
                 </div>
-
               );
             })
-
           )}
-
         </div>
-
       </div>
 
-
-      {/* =================================================
-          REFRESH
-      ================================================= */}
-
-      <div className="flex justify-end">
-
-        <button
-          type="button"
-          onClick={loadDashboard}
-          disabled={loading}
-          className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 transition hover:bg-slate-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-
-          <RefreshCw
-            size={14}
-            className={
-              loading
-                ? "animate-spin"
-                : ""
-            }
-          />
-
-          Refresh dashboard
-
-        </button>
-
-      </div>
-
+      {/* ADD STOCK MODAL */}
+      <AddStockModal isOpen={showAddStock} onClose={() => setShowAddStock(false)} onSuccess={() => fetchDashboardData(false)} />
     </div>
   );
 };
-
 
 export default Dashboard;

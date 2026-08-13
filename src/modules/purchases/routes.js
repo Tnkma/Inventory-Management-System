@@ -74,8 +74,7 @@ router.patch(
   "/:purchaseId/complete",
   authorizeRoles(
     "ADMIN",
-    "MANAGER",
-    "STORE_KEEPER"
+    "MANAGER"
   ),
   completePurchaseController
 );
@@ -90,8 +89,7 @@ router.patch(
   "/:purchaseId/cancel",
   authorizeRoles(
     "ADMIN",
-    "MANAGER",
-    "STORE_KEEPER"
+    "MANAGER"
   ),
   cancelPurchaseController
 );

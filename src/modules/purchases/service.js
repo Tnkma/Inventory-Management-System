@@ -6,9 +6,6 @@ import eventBus
 import { EVENTS }
   from "../../events/eventTypes.js";
 
-import {
-  updateStock
-} from "../inventory/service.js";
 
 
 // =========================================================
@@ -421,7 +418,8 @@ const completePurchase = async (
     await pool.getConnection();
 
   let purchase;
-  let items;
+  let items = [];
+  let stockUpdates = [];
 
 
   try {
@@ -429,9 +427,9 @@ const completePurchase = async (
     await connection.beginTransaction();
 
 
-    // -----------------------------------------------------
-    // Get purchase and lock it
-    // -----------------------------------------------------
+    // =====================================================
+    // GET AND LOCK PURCHASE
+    // =====================================================
 
     const [purchases] =
       await connection.query(
@@ -471,9 +469,9 @@ const completePurchase = async (
     purchase = purchases[0];
 
 
-    // -----------------------------------------------------
-    // Make sure purchase is still PENDING
-    // -----------------------------------------------------
+    // =====================================================
+    // PURCHASE MUST BE PENDING
+    // =====================================================
 
     if (purchase.status !== "PENDING") {
 
@@ -488,26 +486,67 @@ const completePurchase = async (
     }
 
 
-    // -----------------------------------------------------
-    // Get purchase items
-    // -----------------------------------------------------
+    // =====================================================
+    // FIND MAIN STORE
+    // =====================================================
+
+    const [locations] =
+      await connection.query(
+        `
+          SELECT
+            id,
+            name
+
+          FROM inventory_locations
+
+          WHERE LOWER(name) = LOWER('Main Store')
+            AND is_active = TRUE
+
+          LIMIT 1
+        `
+      );
+
+
+    if (locations.length === 0) {
+
+      const error = new Error(
+        "Main Store inventory location not found"
+      );
+
+      error.statusCode = 404;
+
+      throw error;
+    }
+
+
+    const mainStore =
+      locations[0];
+
+
+    const mainStoreId =
+      mainStore.id;
+
+
+    // =====================================================
+    // GET PURCHASE ITEMS
+    // =====================================================
 
     const [purchaseItems] =
       await connection.query(
         `
           SELECT
 
-            id,
-            ingredient_id,
-            quantity,
-            unit_price,
-            total_price
+            pi.id,
+            pi.ingredient_id,
+            pi.quantity,
+            pi.unit_price,
+            pi.total_price
 
-          FROM purchase_items
+          FROM purchase_items pi
 
-          WHERE purchase_id = ?
+          WHERE pi.purchase_id = ?
 
-          ORDER BY id ASC
+          ORDER BY pi.id ASC
         `,
         [purchaseId]
       );
@@ -528,9 +567,227 @@ const completePurchase = async (
     items = purchaseItems;
 
 
-    // -----------------------------------------------------
-    // Mark purchase as COMPLETED
-    // -----------------------------------------------------
+    // =====================================================
+    // RECEIVE EACH ITEM INTO MAIN STORE
+    // =====================================================
+
+    for (const item of items) {
+
+      const ingredientId =
+        item.ingredient_id;
+
+      const quantity =
+        Number(item.quantity);
+
+
+      if (
+        !ingredientId ||
+        !Number.isFinite(quantity) ||
+        quantity <= 0
+      ) {
+
+        const error = new Error(
+          "Invalid purchase item quantity"
+        );
+
+        error.statusCode = 400;
+
+        throw error;
+      }
+
+
+      // ---------------------------------------------------
+      // Check whether inventory record exists
+      // ---------------------------------------------------
+
+      const [inventoryRows] =
+        await connection.query(
+          `
+            SELECT
+              id,
+              current_quantity,
+              reserved_quantity
+
+            FROM inventory
+
+            WHERE ingredient_id = ?
+              AND location_id = ?
+
+            LIMIT 1
+
+            FOR UPDATE
+          `,
+          [
+            ingredientId,
+            mainStoreId
+          ]
+        );
+
+
+      let previousQuantity = 0;
+      let inventoryId;
+
+
+      // ---------------------------------------------------
+      // Create inventory record if necessary
+      // ---------------------------------------------------
+
+      if (inventoryRows.length === 0) {
+
+        const [insertResult] =
+          await connection.query(
+            `
+              INSERT INTO inventory
+              (
+                ingredient_id,
+                location_id,
+                current_quantity,
+                reserved_quantity,
+                last_stock_update
+              )
+
+              VALUES (
+                ?,
+                ?,
+                0,
+                0,
+                CURRENT_TIMESTAMP
+              )
+            `,
+            [
+              ingredientId,
+              mainStoreId
+            ]
+          );
+
+
+        inventoryId =
+          insertResult.insertId;
+
+        previousQuantity = 0;
+
+      } else {
+
+        inventoryId =
+          inventoryRows[0].id;
+
+        previousQuantity =
+          Number(
+            inventoryRows[0].current_quantity
+          );
+      }
+
+
+      // ---------------------------------------------------
+      // Calculate new quantity
+      // ---------------------------------------------------
+
+      const newQuantity =
+        previousQuantity + quantity;
+
+
+      // ---------------------------------------------------
+      // Update inventory
+      // ---------------------------------------------------
+
+      await connection.query(
+        `
+          UPDATE inventory
+
+          SET
+            current_quantity = ?,
+            last_stock_update = CURRENT_TIMESTAMP
+
+          WHERE id = ?
+        `,
+        [
+          newQuantity,
+          inventoryId
+        ]
+      );
+
+
+      // ---------------------------------------------------
+      // Record stock movement
+      // ---------------------------------------------------
+
+      const [movementResult] =
+        await connection.query(
+          `
+            INSERT INTO stock_movements
+            (
+              ingredient_id,
+              location_id,
+              movement_type,
+              quantity,
+              previous_quantity,
+              new_quantity,
+              reference_type,
+              reference_id,
+              reason,
+              created_by
+            )
+
+            VALUES (
+              ?,
+              ?,
+              'PURCHASE',
+              ?,
+              ?,
+              ?,
+              'PURCHASE',
+              ?,
+              ?,
+              ?
+            )
+          `,
+          [
+            ingredientId,
+            mainStoreId,
+            quantity,
+            previousQuantity,
+            newQuantity,
+            purchaseId,
+            `Purchase #${purchaseId}`,
+            completedBy
+          ]
+        );
+
+
+      // ---------------------------------------------------
+      // Store result for response/event
+      // ---------------------------------------------------
+
+      stockUpdates.push({
+
+        ingredientId,
+
+        locationId:
+          mainStoreId,
+
+        location:
+          mainStore.name,
+
+        movementId:
+          movementResult.insertId,
+
+        movementType:
+          "PURCHASE",
+
+        quantity,
+
+        previousQuantity,
+
+        newQuantity
+
+      });
+
+    }
+
+
+    // =====================================================
+    // MARK PURCHASE AS COMPLETED
+    // =====================================================
 
     await connection.query(
       `
@@ -545,10 +802,79 @@ const completePurchase = async (
     );
 
 
+    // =====================================================
+    // COMMIT EVERYTHING
+    // =====================================================
+
     await connection.commit();
 
 
+    // =====================================================
+    // EMIT EVENT AFTER SUCCESSFUL COMMIT
+    // =====================================================
+
+    eventBus.emit(
+      EVENTS.PURCHASE_COMPLETED,
+      {
+        purchaseId,
+
+        supplierId:
+          purchase.supplier_id,
+
+        completedBy,
+
+        totalAmount:
+          Number(purchase.total_amount),
+
+        locationId:
+          mainStoreId,
+
+        location:
+          mainStore.name,
+
+        items:
+          stockUpdates
+      }
+    );
+
+
+    // =====================================================
+    // RETURN
+    // =====================================================
+
+    return {
+
+      purchaseId,
+
+      supplierId:
+        purchase.supplier_id,
+
+      status:
+        "COMPLETED",
+
+      totalAmount:
+        Number(purchase.total_amount),
+
+      completedBy,
+
+      locationId:
+        mainStoreId,
+
+      location:
+        mainStore.name,
+
+      stockUpdates
+
+    };
+
+
   } catch (error) {
+
+    // -----------------------------------------------------
+    // IMPORTANT:
+    // If anything fails, purchase + inventory +
+    // stock movements are all rolled back.
+    // -----------------------------------------------------
 
     await connection.rollback();
 
@@ -559,98 +885,7 @@ const completePurchase = async (
     connection.release();
 
   }
-
-
-  // =====================================================
-  // Update inventory AFTER purchase transaction commits
-  // =====================================================
-
-  const stockUpdates = [];
-
-
-  try {
-
-    for (const item of items) {
-
-      const stockUpdate =
-        await updateStock(
-          {
-            ingredientId:
-              item.ingredient_id,
-
-            quantity:
-              Number(item.quantity),
-
-            movementType:
-              "PURCHASE",
-
-            reason:
-              `Purchase #${purchaseId}`,
-
-            referenceType:
-              "PURCHASE",
-
-            referenceId:
-              purchaseId
-
-          },
-          completedBy
-        );
-
-
-      stockUpdates.push(
-        stockUpdate
-      );
-    }
-
-
-    // ---------------------------------------------------
-    // Emit purchase completed event
-    // ---------------------------------------------------
-
-    eventBus.emit(
-      EVENTS.PURCHASE_COMPLETED,
-      {
-        purchaseId,
-        supplierId: purchase.supplier_id,
-        completedBy,
-        totalAmount:
-          Number(purchase.total_amount),
-        items: stockUpdates
-      }
-    );
-
-
-    return {
-      purchaseId,
-      supplierId:
-        purchase.supplier_id,
-      status: "COMPLETED",
-      totalAmount:
-        Number(purchase.total_amount),
-      completedBy,
-      stockUpdates
-    };
-
-
-  } catch (error) {
-
-    /*
-      IMPORTANT:
-
-      At this point the purchase is already COMPLETED.
-
-      If stock updating fails, we must not silently
-      pretend everything succeeded.
-
-      For now we surface the error so it can be handled
-      and logged properly.
-    */
-
-    throw error;
-  }
 };
-
 
 // =========================================================
 // CANCEL PURCHASE

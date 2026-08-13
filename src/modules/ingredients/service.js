@@ -392,9 +392,117 @@ const getIngredientById = async (
   return ingredients[0];
 };
 
+const updateIngredient = async (
+  ingredientId,
+  data
+) => {
+
+  const {
+    name,
+    sku,
+    description,
+    unit,
+    minimum_stock,
+    maximum_stock,
+    reorder_level,
+    category_id
+  } = data;
+
+
+  const [existing] = await pool.query(
+    `
+      SELECT id
+      FROM ingredients
+      WHERE id = ?
+      LIMIT 1
+    `,
+    [ingredientId]
+  );
+
+
+  if (existing.length === 0) {
+
+    const error = new Error(
+      "Ingredient not found"
+    );
+
+    error.statusCode = 404;
+
+    throw error;
+
+  }
+
+
+  await pool.query(
+    `
+      UPDATE ingredients
+
+      SET
+        name = ?,
+        sku = ?,
+        description = ?,
+        unit = ?,
+        minimum_stock = ?,
+        maximum_stock = ?,
+        reorder_level = ?,
+        category_id = ?
+
+      WHERE id = ?
+    `,
+    [
+      name,
+      sku,
+      description,
+      unit,
+      minimum_stock,
+      maximum_stock,
+      reorder_level,
+      category_id,
+      ingredientId
+    ]
+  );
+
+
+  const [rows] = await pool.query(
+    `
+      SELECT
+        i.id,
+        i.name,
+        i.sku,
+        i.description,
+        i.unit,
+        i.minimum_stock,
+        i.maximum_stock,
+        i.reorder_level,
+        i.is_active,
+        i.category_id,
+
+        c.name AS category,
+
+        i.created_at,
+        i.updated_at
+
+      FROM ingredients i
+
+      INNER JOIN inventory_categories c
+        ON i.category_id = c.id
+
+      WHERE i.id = ?
+
+      LIMIT 1
+    `,
+    [ingredientId]
+  );
+
+
+  return rows[0];
+
+};
+
 
 export {
   createIngredient,
   getIngredients,
-  getIngredientById
+  getIngredientById,
+  updateIngredient
 };
