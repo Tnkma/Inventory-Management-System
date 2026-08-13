@@ -3,18 +3,38 @@ import Topbar from "../components/Topbar";
 
 const DashboardLayout = ({ children }) => {
   return (
-    <div className="min-h-screen bg-slate-100 flex">
+    <div className="min-h-screen bg-slate-50">
 
-      {/* Sidebar */}
+      {/* =====================================================
+          SIDEBAR
+      ===================================================== */}
+
       <Sidebar />
 
-      {/* Main area */}
-      <div className="flex-1 p-6">
+
+      {/* =====================================================
+          APPLICATION AREA
+      ===================================================== */}
+
+      <div className="min-h-screen lg:pl-[218px]">
+
+        {/* ===================================================
+            TOPBAR
+        =================================================== */}
 
         <Topbar />
 
-        <main className="mt-6">
-          {children}
+
+        {/* ===================================================
+            MAIN CONTENT
+        =================================================== */}
+
+        <main className="px-4 py-6 sm:px-6 lg:px-8">
+
+          <div className="mx-auto w-full max-w-[1600px]">
+            {children}
+          </div>
+
         </main>
 
       </div>

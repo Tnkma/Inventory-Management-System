@@ -9,15 +9,13 @@ import authorizeRoles
 import {
   create,
   list,
-  getOne
+  getOne,
+  update
 } from "./controller.js";
-
 
 const router = express.Router();
 
-
 router.use(authenticate);
-
 
 // List ingredients
 router.get(
@@ -31,7 +29,6 @@ router.get(
   list
 );
 
-
 // Get one ingredient
 router.get(
   "/:id",
@@ -44,7 +41,6 @@ router.get(
   getOne
 );
 
-
 // Create ingredient
 router.post(
   "/",
@@ -56,5 +52,15 @@ router.post(
   create
 );
 
+// Update ingredient
+router.patch(
+  "/:id",
+  authorizeRoles(
+    "ADMIN",
+    "MANAGER",
+    "STORE_KEEPER"
+  ),
+  update
+);
 
 export default router;

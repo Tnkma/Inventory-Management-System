@@ -1,130 +1,123 @@
+import { useEffect, useState } from "react";
 import {
+  Search,
   Bell,
-  CalendarDays,
-  ChevronDown,
-  Search
+  Menu,
+  Command,
 } from "lucide-react";
 
-import { useAuth } from "../context/AuthContext";
+const Topbar = ({ onMenuClick }) => {
+  const [currentDate, setCurrentDate] = useState(new Date());
 
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentDate(new Date());
+    }, 60 * 1000);
 
-const Topbar = () => {
+    return () => clearInterval(timer);
+  }, []);
 
-  const { user } = useAuth();
-
-
-  // -----------------------------------------------------
-  // User information
-  // -----------------------------------------------------
-
-  const firstName = user?.firstName || "";
-  const lastName = user?.lastName || "";
-
-  const fullName =
-    `${firstName} ${lastName}`.trim() || "User";
-
-
-  // -----------------------------------------------------
-  // Generate initials
-  // -----------------------------------------------------
-
-  const initials = (
-    `${firstName?.charAt(0) || ""}${lastName?.charAt(0) || ""}`
-  ).toUpperCase() || "U";
-
-
-  // -----------------------------------------------------
-  // Format role
-  // -----------------------------------------------------
-
-  const formattedRole =
-    user?.role
-      ? user.role
-          .toLowerCase()
-          .replace(/_/g, " ")
-          .replace(/\b\w/g, (letter) =>
-            letter.toUpperCase()
-          )
-      : "User";
-
-
-  // -----------------------------------------------------
-  // Current date
-  // -----------------------------------------------------
-
-  const currentDate = new Intl.DateTimeFormat(
-    "en-US",
-    {
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-      year: "numeric"
-    }
-  ).format(new Date());
-
+  const formattedDate = new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(currentDate);
 
   return (
-
     <header
       className="
+        sticky
+        top-0
+        z-30
         flex
+        h-[68px]
         items-center
-        justify-between
-        gap-6
-        rounded-3xl
-        border
-        border-slate-100
-        bg-white
-        px-5
-        py-4
-        shadow-sm
-        lg:px-6
+        border-b
+        border-slate-200
+        bg-white/95
+        px-4
+        backdrop-blur
+        sm:px-6
+        lg:px-7
       "
     >
 
-      {/* =================================================
-          GLOBAL SEARCH
-      ================================================= */}
+      {/* =====================================================
+          LEFT
+      ===================================================== */}
 
-      <div className="flex min-w-0 flex-1">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
 
-        <div className="
-          relative
-          w-full
-          max-w-xl
-        ">
+        {/* Mobile menu */}
+
+        <button
+          type="button"
+          onClick={onMenuClick}
+          aria-label="Open navigation"
+          className="
+            flex
+            h-9
+            w-9
+            shrink-0
+            items-center
+            justify-center
+            rounded-lg
+            text-slate-500
+            transition-colors
+            hover:bg-slate-100
+            hover:text-slate-900
+            lg:hidden
+          "
+        >
+          <Menu size={19} strokeWidth={1.8} />
+        </button>
+
+
+        {/* Search */}
+
+        <div
+          className="
+            group
+            relative
+            w-full
+            max-w-[520px]
+          "
+        >
 
           <Search
-            size={19}
+            size={17}
+            strokeWidth={1.8}
             className="
               pointer-events-none
               absolute
-              left-4
+              left-3.5
               top-1/2
               -translate-y-1/2
               text-slate-400
+              transition-colors
+              group-focus-within:text-blue-600
             "
           />
 
           <input
             type="search"
-            placeholder="Search inventory, ingredients, purchases..."
+            placeholder="Search inventory, ingredients, suppliers..."
             className="
-              h-11
+              h-10
               w-full
-              rounded-2xl
+              rounded-xl
               border
               border-slate-200
               bg-slate-50
-              pl-11
-              pr-4
+              pl-10
+              pr-20
               text-sm
-              font-medium
               text-slate-800
               outline-none
               transition-all
-              duration-200
               placeholder:text-slate-400
+              hover:border-slate-300
+              hover:bg-white
               focus:border-blue-300
               focus:bg-white
               focus:ring-4
@@ -132,179 +125,118 @@ const Topbar = () => {
             "
           />
 
+
+          {/* Keyboard shortcut */}
+
+          <div
+            className="
+              pointer-events-none
+              absolute
+              right-2.5
+              top-1/2
+              hidden
+              -translate-y-1/2
+              items-center
+              gap-1
+              rounded-md
+              border
+              border-slate-200
+              bg-white
+              px-1.5
+              py-0.5
+              text-[10px]
+              font-medium
+              text-slate-400
+              shadow-sm
+              sm:flex
+            "
+          >
+            <Command size={10} />
+
+            <span>K</span>
+          </div>
+
         </div>
 
       </div>
 
 
-      {/* =================================================
-          RIGHT SIDE
-      ================================================= */}
+      {/* =====================================================
+          RIGHT
+      ===================================================== */}
 
-      <div className="flex shrink-0 items-center gap-3">
+      <div className="ml-4 flex shrink-0 items-center gap-2 sm:gap-4">
 
-        {/* -----------------------------------------------
-            Date
-        ----------------------------------------------- */}
+        {/* Date */}
 
-        <div className="
-          hidden
-          items-center
-          gap-2
-          text-xs
-          font-medium
-          text-slate-400
-          xl:flex
-        ">
+        <div
+          className="
+            hidden
+            items-center
+            border-r
+            border-slate-200
+            pr-4
+            sm:flex
+          "
+        >
 
-          <CalendarDays size={15} />
-
-          <span>
-            {currentDate}
-          </span>
+          <p
+            className="
+              text-xs
+              font-medium
+              text-slate-500
+            "
+          >
+            {formattedDate}
+          </p>
 
         </div>
 
 
-        {/* -----------------------------------------------
-            Divider
-        ----------------------------------------------- */}
-
-        <div className="
-          hidden
-          h-8
-          w-px
-          bg-slate-200
-          xl:block
-        " />
-
-
-        {/* -----------------------------------------------
-            Notifications
-        ----------------------------------------------- */}
+        {/* Notifications */}
 
         <button
           type="button"
+          aria-label="Notifications"
           className="
+            group
             relative
             flex
-            h-11
-            w-11
+            h-10
+            w-10
             items-center
             justify-center
-            rounded-2xl
-            border
-            border-slate-100
-            bg-slate-50
+            rounded-xl
             text-slate-500
             transition-all
-            duration-200
             hover:bg-slate-100
-            hover:text-slate-800
+            hover:text-slate-900
           "
-          aria-label="Notifications"
         >
 
-          <Bell size={19} />
+          <Bell
+            size={18}
+            strokeWidth={1.8}
+            className="
+              transition-transform
+              group-hover:scale-105
+            "
+          />
+
+
+          {/* Unread indicator */}
 
           <span
             className="
               absolute
-              right-2
+              right-2.5
               top-2
-              h-2
-              w-2
+              h-1.5
+              w-1.5
               rounded-full
-              bg-red-500
+              bg-blue-600
               ring-2
               ring-white
-            "
-          />
-
-        </button>
-
-
-        {/* -----------------------------------------------
-            Divider
-        ----------------------------------------------- */}
-
-        <div className="
-          hidden
-          h-8
-          w-px
-          bg-slate-200
-          sm:block
-        " />
-
-
-        {/* -----------------------------------------------
-            User
-        ----------------------------------------------- */}
-
-        <button
-          type="button"
-          className="
-            flex
-            items-center
-            gap-3
-            rounded-2xl
-            px-2
-            py-1.5
-            transition-all
-            duration-200
-            hover:bg-slate-50
-          "
-        >
-
-          <div
-            className="
-              flex
-              h-10
-              w-10
-              shrink-0
-              items-center
-              justify-center
-              rounded-xl
-              bg-blue-600
-              text-sm
-              font-bold
-              text-white
-              shadow-sm
-              shadow-blue-600/20
-            "
-          >
-            {initials}
-          </div>
-
-
-          <div className="hidden text-left sm:block">
-
-            <p className="
-              text-sm
-              font-semibold
-              leading-5
-              text-slate-800
-            ">
-              {fullName}
-            </p>
-
-            <p className="
-              text-xs
-              font-medium
-              text-slate-400
-            ">
-              {formattedRole}
-            </p>
-
-          </div>
-
-
-          <ChevronDown
-            size={16}
-            className="
-              hidden
-              text-slate-400
-              sm:block
             "
           />
 
@@ -313,9 +245,7 @@ const Topbar = () => {
       </div>
 
     </header>
-
   );
 };
-
 
 export default Topbar;

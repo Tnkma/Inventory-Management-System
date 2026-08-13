@@ -14,6 +14,14 @@ import Suppliers from "./pages/Suppliers";
 import Users from "./pages/Users";
 import Reports from "./pages/Reports";
 import Notifications from "./pages/Notifications";
+import InventoryDetailModal from "./components/InventoryDetailModal";
+import Categories from "./pages/Categories";
+import Locations from "./pages/Locations";
+import Transfers from "./pages/Transfers";
+
+
+
+import Ingredients from "./pages/Ingredients";
 
 import Login from "./pages/auth/Login";
 
@@ -85,6 +93,20 @@ const App = () => {
         />
 
 
+        {/* TRANSFERS */}
+
+        <Route
+          path="/transfers"
+          element={
+            <ProtectedRoute>
+              <DashboardLayout>
+                <Transfers />
+              </DashboardLayout>
+            </ProtectedRoute>
+          }
+        />  
+
+
         {/* PURCHASES */}
 
         <Route
@@ -97,6 +119,19 @@ const App = () => {
             </ProtectedRoute>
           }
         />
+
+        {/* LOCATIONS */}
+
+        <Route
+          path="/locations"
+          element={
+            <ProtectedRoute>
+              <DashboardLayout>
+                <Locations />
+              </DashboardLayout>
+            </ProtectedRoute>
+          }
+        />  
 
 
         {/* SUPPLIERS */}
@@ -154,6 +189,18 @@ const App = () => {
           }
         />
 
+      {/* INVENTORY DETAIL */}
+      <Route
+        path="/inventory/:ingredientId"
+        element={
+          <ProtectedRoute>
+            <DashboardLayout>
+              <InventoryDetailModal />
+            </DashboardLayout>
+          </ProtectedRoute>
+        }
+      />
+
 
         {/* DEFAULT */}
 
@@ -179,6 +226,30 @@ const App = () => {
             />
           }
         />
+
+      {/* INGREDIENTS */}
+      <Route
+        path="/ingredients"
+        element={
+          <ProtectedRoute>
+            <DashboardLayout>
+              <Ingredients />
+            </DashboardLayout>
+          </ProtectedRoute>
+        }
+      />  
+
+      {/* CATEGORIES */}
+      <Route
+        path="/categories"
+        element={
+          <ProtectedRoute>
+            <DashboardLayout>
+              <Categories />
+            </DashboardLayout>
+          </ProtectedRoute>
+        }
+      />
 
       </Routes>
 
