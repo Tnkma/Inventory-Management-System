@@ -31,3 +31,20 @@ VALUES
     ('Cooking Oils', 'Cooking oils and fats'),
     ('Packaging', 'Takeaway and food packaging'),
     ('Cleaning Supplies', 'Restaurant cleaning materials');
+
+
+
+INSERT INTO inventory_locations
+(
+    name,
+    description,
+    location_type,
+    is_active
+)
+VALUES
+(
+    'Main Store',
+    'Central inventory receiving and distribution store',
+    'MAIN_STORE',
+    TRUE
+);

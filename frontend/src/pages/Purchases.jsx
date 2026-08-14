@@ -659,7 +659,7 @@ const Purchases = () => {
                           "Unknown supplier"}
                         {" · "}
                         {purchase.receiving_location ||
-                          "Receiving location not set"}
+                          "Receiving location Main Store"}
                       </p>
 
                       <p className="mt-1 text-[11px] text-slate-400">

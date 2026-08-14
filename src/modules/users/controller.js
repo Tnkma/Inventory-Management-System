@@ -3,7 +3,8 @@ import {
   getUserById,
   createUser,
   updateUserRole,
-  updateUserStatus
+  updateUserStatus,
+  updateUserAssignment
 } from "./service.js";
 
 
@@ -137,6 +138,35 @@ const userRole = async (req, res, next) => {
   }
 };
 
+const changeUserAssignment = async (
+  req,
+  res,
+  next
+) => {
+
+  try {
+
+    const user =
+      await updateUserAssignment(
+        req.params.id,
+        req.body.assignedLocationId,
+        req.user.userId
+      );
+
+
+    res.status(200).json({
+      success: true,
+      message:
+        "User location assignment updated successfully",
+      data: user
+    });
+
+  } catch (error) {
+
+    next(error);
+
+  }
+};
 
 export {
   listUsers,
@@ -144,5 +174,6 @@ export {
   userRole,
   createNewUser,
   changeUserRole,
-  changeUserStatus
+  changeUserStatus,
+  changeUserAssignment
 };

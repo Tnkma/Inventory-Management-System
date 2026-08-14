@@ -178,6 +178,8 @@ This script reads `ADMIN_EMAIL` and `ADMIN_PASSWORD` from environment variables 
 - `npm start` — start backend with `node`
 - `cd frontend && npm run dev` — start frontend dev server
 - `cd frontend && npm run build` — build production frontend bundle
+- Go ahead to the `User section` to create Users and assign `Roles` to them
+- You can also assign and reassign `KITCHEN STAFF` to various kitchen location
 
 ## API Endpoints (high level)
 

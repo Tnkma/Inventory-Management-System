@@ -16,12 +16,24 @@ const getUsers = async () => {
       u.phone,
       u.is_active,
       u.last_login_at,
+      u.assigned_location_id,
       u.created_at,
+
       r.id AS role_id,
-      r.name AS role
+      r.name AS role,
+
+      l.name AS assigned_location,
+      l.location_type AS assigned_location_type,
+      l.is_active AS assigned_location_active
+
     FROM users u
+
     INNER JOIN roles r
       ON u.role_id = r.id
+
+    LEFT JOIN inventory_locations l
+      ON u.assigned_location_id = l.id
+
     ORDER BY u.created_at DESC
   `);
 
@@ -238,10 +250,158 @@ const updateUserStatus = async (
 };
 
 
+// Update user assignment to inventory location
+const updateUserAssignment = async (
+  userId,
+  assignedLocationId,
+  updatedBy
+) => {
+
+  // -------------------------------------------------------
+  // Get user
+  // -------------------------------------------------------
+
+  const user =
+    await getUserById(userId);
+
+
+  // -------------------------------------------------------
+  // If removing assignment
+  // -------------------------------------------------------
+
+  if (
+    assignedLocationId === null ||
+    assignedLocationId === undefined ||
+    assignedLocationId === ""
+  ) {
+
+    await pool.query(
+      `
+        UPDATE users
+
+        SET assigned_location_id = NULL
+
+        WHERE id = ?
+      `,
+      [userId]
+    );
+
+
+    eventBus.emit(
+      EVENTS.USER_LOCATION_UPDATED,
+      {
+        userId,
+        assignedLocationId: null,
+        updatedBy
+      }
+    );
+
+
+    return getUserById(userId);
+  }
+
+
+  // -------------------------------------------------------
+  // Verify location
+  // -------------------------------------------------------
+
+  const [locations] =
+    await pool.query(
+      `
+        SELECT
+          id,
+          name,
+          location_type,
+          is_active
+
+        FROM inventory_locations
+
+        WHERE id = ?
+
+        LIMIT 1
+      `,
+      [assignedLocationId]
+    );
+
+
+  if (locations.length === 0) {
+
+    const error = new Error(
+      "Inventory location not found"
+    );
+
+    error.statusCode = 404;
+
+    throw error;
+  }
+
+
+  const location =
+    locations[0];
+
+
+  // -------------------------------------------------------
+  // Only kitchens can be assigned to kitchen staff
+  // -------------------------------------------------------
+
+  if (
+    user.role === "KITCHEN_STAFF" &&
+    location.location_type !== "KITCHEN"
+  ) {
+
+    const error = new Error(
+      "Kitchen staff can only be assigned to a kitchen"
+    );
+
+    error.statusCode = 400;
+
+    throw error;
+  }
+
+
+  // -------------------------------------------------------
+  // Assignment
+  // -------------------------------------------------------
+
+  await pool.query(
+    `
+      UPDATE users
+
+      SET assigned_location_id = ?
+
+      WHERE id = ?
+    `,
+    [
+      assignedLocationId,
+      userId
+    ]
+  );
+
+
+  eventBus.emit(
+    EVENTS.USER_LOCATION_UPDATED,
+    {
+      userId,
+
+      assignedLocationId,
+
+      locationName:
+        location.name,
+
+      updatedBy
+    }
+  );
+
+
+  return getUserById(userId);
+};
+
+
 export {
   getUsers,
   getUserById,
   createUser,
   updateUserRole,
-  updateUserStatus
+  updateUserStatus,
+  updateUserAssignment
 };

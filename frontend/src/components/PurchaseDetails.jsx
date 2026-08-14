@@ -285,7 +285,7 @@ const PurchaseDetails = ({
   // =========================================================
 
   const approvedBy =
-    purchase?.approved_by ||
+    // purchase?.approved_by ||
     purchase?.approved_by_name ||
     purchase?.completed_by ||
     purchase?.completed_by_name ||
@@ -995,9 +995,9 @@ const PurchaseDetails = ({
                         font-semibold
                         text-slate-800
                       ">
-                        {receivedAt
-                          ? formatDate(receivedAt)
-                          : "Receipt date not available"}
+                        {approvedAt
+                          ? formatDate(approvedAt)
+                          : "Approval information not available"}
                       </p>
 
                     </div>

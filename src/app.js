@@ -30,6 +30,9 @@ import transferRoutes
 import categoryRoutes
   from "./modules/categories/routes.js";
 
+import reportsRoutes
+  from "./modules/reports/routes.js";
+
 
 
 
@@ -97,6 +100,11 @@ app.use(
 app.use(
   "/api/categories",
   categoryRoutes
+);
+
+app.use(
+  "/api/reports",
+  reportsRoutes
 );
 
 app.use(errorHandler);

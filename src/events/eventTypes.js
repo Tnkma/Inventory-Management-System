@@ -16,6 +16,15 @@ export const EVENTS = {
     USER_PASSWORD_CHANGED:
         "user.password_changed",
 
+    USER_ROLE_UPDATED:
+    "user.role_updated",
+
+    USER_STATUS_UPDATED:
+        "user.status_updated",
+
+    USER_LOCATION_UPDATED:
+        "user.location_updated",
+
 
     // =========================
     // SUPPLIERS
@@ -75,7 +84,7 @@ export const EVENTS = {
     STOCK_ADJUSTED:
         "inventory.stock_adjusted",
 
-    NOTIFICATION_CREATED: 
+    NOTIFICATION_CREATED:
         "NOTIFICATION_CREATED",
 
     CONSUMPTION_RECORDED:
@@ -88,19 +97,35 @@ export const EVENTS = {
         "inventory.location.created",
 
     INVENTORY_LOCATION_UPDATED:
-      "inventory.location.updated",
+        "inventory.location.updated",
 
     INVENTORY_LOCATION_STATUS_CHANGED:
-      "inventory.location.status.changed",
+        "inventory.location.status.changed",
+
+
+    // =========================
+    // TRANSFERS
+    // =========================
+
+    TRANSFER_REQUESTED:
+        "transfer.requested",
+
+    TRANSFER_APPROVED:
+        "transfer.approved",
+
+    TRANSFER_REJECTED:
+        "transfer.rejected",
 
     TRANSFER_COMPLETED:
-      "transfer.completed",
+        "transfer.completed",
 
-    CATEGORY_CREATED: 
-      "CATEGORY_CREATED",
 
-    CATEGORY_UPDATED: 
-      "CATEGORY_UPDATED",
-    CATEGORY_STATUS_UPDATED: 
-      "CATEGORY_STATUS_UPDATED",
+    CATEGORY_CREATED:
+        "CATEGORY_CREATED",
+
+    CATEGORY_UPDATED:
+        "CATEGORY_UPDATED",
+
+    CATEGORY_STATUS_UPDATED:
+        "CATEGORY_STATUS_UPDATED",
 };
