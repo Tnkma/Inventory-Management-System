@@ -1,3 +1,7 @@
+// =========================================================
+// CREATE TRANSFER REQUEST
+// =========================================================
+
 const validateCreateTransfer = (
   req,
   res,
@@ -6,11 +10,14 @@ const validateCreateTransfer = (
 
   const {
     ingredientId,
-    fromLocationId,
-    toLocationId,
-    quantity
+    quantity,
+    reason
   } = req.body;
 
+
+  // -------------------------------------------------------
+  // Ingredient
+  // -------------------------------------------------------
 
   if (!ingredientId) {
 
@@ -24,29 +31,9 @@ const validateCreateTransfer = (
   }
 
 
-  if (!fromLocationId) {
-
-    const error = new Error(
-      "Source location is required"
-    );
-
-    error.statusCode = 400;
-
-    throw error;
-  }
-
-
-  if (!toLocationId) {
-
-    const error = new Error(
-      "Destination location is required"
-    );
-
-    error.statusCode = 400;
-
-    throw error;
-  }
-
+  // -------------------------------------------------------
+  // Quantity
+  // -------------------------------------------------------
 
   if (
     quantity === undefined ||
@@ -64,13 +51,56 @@ const validateCreateTransfer = (
   }
 
 
+  // -------------------------------------------------------
+  // Reason
+  // -------------------------------------------------------
+
   if (
-    Number(fromLocationId) ===
-    Number(toLocationId)
+    reason !== undefined &&
+    reason !== null &&
+    (
+      typeof reason !== "string" ||
+      reason.trim().length === 0
+    )
   ) {
 
     const error = new Error(
-      "Source and destination locations must be different"
+      "Transfer reason must be a valid string"
+    );
+
+    error.statusCode = 400;
+
+    throw error;
+  }
+
+
+  next();
+};
+
+
+// =========================================================
+// REJECT TRANSFER
+// =========================================================
+
+const validateRejectTransfer = (
+  req,
+  res,
+  next
+) => {
+
+  const {
+    rejectionReason
+  } = req.body;
+
+
+  if (
+    !rejectionReason ||
+    typeof rejectionReason !== "string" ||
+    !rejectionReason.trim()
+  ) {
+
+    const error = new Error(
+      "Rejection reason is required"
     );
 
     error.statusCode = 400;
@@ -84,5 +114,6 @@ const validateCreateTransfer = (
 
 
 export {
-  validateCreateTransfer
+  validateCreateTransfer,
+  validateRejectTransfer
 };

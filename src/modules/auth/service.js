@@ -7,6 +7,10 @@ import eventBus from "../../events/eventBus.js";
 import { EVENTS } from "../../events/eventTypes.js";
 
 
+// =========================================================
+// REGISTER
+// =========================================================
+
 const register = async ({
   firstName,
   lastName,
@@ -15,182 +19,426 @@ const register = async ({
   phone
 }) => {
 
-  // 1. Check whether email already exists
-  const [existingUsers] = await pool.query(
-    "SELECT id FROM users WHERE email = ? LIMIT 1",
-    [email]
-  );
+  // =======================================================
+  // CHECK WHETHER EMAIL ALREADY EXISTS
+  // =======================================================
+
+  const [existingUsers] =
+    await pool.query(
+      `
+        SELECT id
+
+        FROM users
+
+        WHERE email = ?
+
+        LIMIT 1
+      `,
+      [email]
+    );
+
 
   if (existingUsers.length > 0) {
-    const error = new Error("Email is already registered");
+
+    const error =
+      new Error(
+        "Email is already registered"
+      );
+
     error.statusCode = 409;
+
     throw error;
   }
 
 
-  // 2. Get default role
-  const [roles] = await pool.query(
-    "SELECT id FROM roles WHERE name = ? LIMIT 1",
-    ["KITCHEN_STAFF"]
-  );
+  // =======================================================
+  // DEFAULT ROLE
+  // =======================================================
+  //
+  // Public registration creates a Kitchen Staff account.
+  // Admin/Manager can later change the role from Users.
+  //
+  // =======================================================
+
+  const [roles] =
+    await pool.query(
+      `
+        SELECT
+          id,
+          name
+
+        FROM roles
+
+        WHERE name = ?
+
+        LIMIT 1
+      `,
+      ["KITCHEN_STAFF"]
+    );
+
 
   if (roles.length === 0) {
-    const error = new Error("Default user role was not found");
+
+    const error =
+      new Error(
+        "Default user role was not found"
+      );
+
     error.statusCode = 500;
+
     throw error;
   }
 
-  const roleId = roles[0].id;
+
+  const roleId =
+    roles[0].id;
+
+  const roleName =
+    roles[0].name;
 
 
-  // 3. Hash password
-  const hashedPassword = await bcrypt.hash(password, 12);
+  // =======================================================
+  // HASH PASSWORD
+  // =======================================================
+
+  const hashedPassword =
+    await bcrypt.hash(
+      password,
+      12
+    );
 
 
-  // 4. Create user
-  const [result] = await pool.query(
-    `
-      INSERT INTO users
-      (
-        role_id,
-        first_name,
-        last_name,
+  // =======================================================
+  // CREATE USER
+  // =======================================================
+
+  const [result] =
+    await pool.query(
+      `
+        INSERT INTO users
+        (
+          role_id,
+          first_name,
+          last_name,
+          email,
+          password,
+          phone
+        )
+
+        VALUES (?, ?, ?, ?, ?, ?)
+      `,
+      [
+        roleId,
+        firstName,
+        lastName,
         email,
-        password,
-        phone
-      )
-      VALUES (?, ?, ?, ?, ?, ?)
-    `,
-    [
-      roleId,
+        hashedPassword,
+        phone || null
+      ]
+    );
+
+
+  // =======================================================
+  // DOMAIN EVENT
+  // =======================================================
+
+  eventBus.emit(
+    EVENTS.USER_REGISTERED,
+    {
+      userId:
+        result.insertId,
+
       firstName,
+
       lastName,
+
       email,
-      hashedPassword,
-      phone || null
-    ]
+
+      roleId,
+
+      role:
+        roleName
+    }
   );
 
 
-  // 5. Emit domain event
-  eventBus.emit(EVENTS.USER_REGISTERED, {
-    userId: result.insertId,
-    firstName,
-    lastName,
-    email,
-    roleId
-  });
-
+  // =======================================================
+  // RESPONSE
+  // =======================================================
 
   return {
-    id: result.insertId,
+
+    id:
+      result.insertId,
+
     firstName,
+
     lastName,
+
     email,
-    roleId
+
+    phone:
+      phone || null,
+
+    roleId,
+
+    role:
+      roleName,
+
+    assignedLocationId:
+      null,
+
+    assignedLocation:
+      null,
+
+    assignedLocationType:
+      null
   };
 };
 
 
-const login = async ({ email, password }) => {
+// =========================================================
+// LOGIN
+// =========================================================
 
-  // 1. Find user
-  const [users] = await pool.query(
-    `
-      SELECT
-        u.id,
-        u.first_name,
-        u.last_name,
-        u.email,
-        u.password,
-        u.is_active,
-        r.id AS role_id,
-        r.name AS role
-      FROM users u
-      INNER JOIN roles r
-        ON u.role_id = r.id
-      WHERE u.email = ?
-      LIMIT 1
-    `,
-    [email]
-  );
+const login = async ({
+  email,
+  password
+}) => {
 
+  // =======================================================
+  // FIND USER
+  // =======================================================
+
+  const [users] =
+    await pool.query(
+      `
+        SELECT
+
+          u.id,
+
+          u.first_name,
+
+          u.last_name,
+
+          u.email,
+
+          u.password,
+
+          u.phone,
+
+          u.is_active,
+
+          u.last_login_at,
+
+          u.assigned_location_id,
+
+          r.id AS role_id,
+
+          r.name AS role,
+
+          l.name AS assigned_location,
+
+          l.location_type AS assigned_location_type,
+
+          l.is_active AS assigned_location_active
+
+        FROM users u
+
+
+        INNER JOIN roles r
+          ON u.role_id = r.id
+
+
+        LEFT JOIN inventory_locations l
+          ON u.assigned_location_id = l.id
+
+
+        WHERE u.email = ?
+
+        LIMIT 1
+      `,
+      [email]
+    );
+
+
+  // =======================================================
+  // USER NOT FOUND
+  // =======================================================
 
   if (users.length === 0) {
-    const error = new Error("Invalid email or password");
+
+    const error =
+      new Error(
+        "Invalid email or password"
+      );
+
     error.statusCode = 401;
+
     throw error;
   }
 
 
-  const user = users[0];
+  const user =
+    users[0];
 
 
-  // 2. Check active status
+  // =======================================================
+  // CHECK ACTIVE USER
+  // =======================================================
+
   if (!user.is_active) {
-    const error = new Error("Your account has been disabled");
+
+    const error =
+      new Error(
+        "Your account has been disabled"
+      );
+
     error.statusCode = 403;
+
     throw error;
   }
 
 
-  // 3. Compare password
-  const passwordMatches = await bcrypt.compare(
-    password,
-    user.password
-  );
+  // =======================================================
+  // CHECK PASSWORD
+  // =======================================================
+
+  const passwordMatches =
+    await bcrypt.compare(
+      password,
+      user.password
+    );
 
 
   if (!passwordMatches) {
-    const error = new Error("Invalid email or password");
+
+    const error =
+      new Error(
+        "Invalid email or password"
+      );
+
     error.statusCode = 401;
+
     throw error;
   }
 
 
-  // 4. Update last login
+  // =======================================================
+  // UPDATE LAST LOGIN
+  // =======================================================
+
   await pool.query(
     `
       UPDATE users
-      SET last_login_at = CURRENT_TIMESTAMP
+
+      SET last_login_at =
+        CURRENT_TIMESTAMP
+
       WHERE id = ?
     `,
     [user.id]
   );
 
 
-  // 5. Generate JWT
-  const token = jwt.sign(
+  // =======================================================
+  // GENERATE JWT
+  // =======================================================
+
+  const token =
+    jwt.sign(
+      {
+        userId:
+          user.id,
+
+        roleId:
+          user.role_id,
+
+        role:
+          user.role,
+
+        email:
+          user.email
+      },
+
+      env.jwt.secret,
+
+      {
+        expiresIn:
+          env.jwt.expiresIn
+      }
+    );
+
+
+  // =======================================================
+  // DOMAIN EVENT
+  // =======================================================
+
+  eventBus.emit(
+    EVENTS.USER_LOGGED_IN,
     {
-      userId: user.id,
-      roleId: user.role_id,
-      role: user.role,
-      email: user.email
-    },
-    env.jwt.secret,
-    {
-      expiresIn: env.jwt.expiresIn
+      userId:
+        user.id,
+
+      email:
+        user.email,
+
+      role:
+        user.role
     }
   );
 
 
-  // 6. Emit event
-  eventBus.emit(EVENTS.USER_LOGGED_IN, {
-    userId: user.id,
-    email: user.email,
-    role: user.role
-  });
-
+  // =======================================================
+  // RESPONSE
+  // =======================================================
 
   return {
+
     token,
+
     user: {
-      id: user.id,
-      firstName: user.first_name,
-      lastName: user.last_name,
-      email: user.email,
-      role: user.role
+
+      id:
+        user.id,
+
+      firstName:
+        user.first_name,
+
+      lastName:
+        user.last_name,
+
+      email:
+        user.email,
+
+      phone:
+        user.phone,
+
+      roleId:
+        user.role_id,
+
+      role:
+        user.role,
+
+
+      // ---------------------------------------------------
+      // KITCHEN / LOCATION ASSIGNMENT
+      // ---------------------------------------------------
+
+      assignedLocationId:
+        user.assigned_location_id,
+
+      assignedLocation:
+        user.assigned_location,
+
+      assignedLocationType:
+        user.assigned_location_type,
+
+      assignedLocationActive:
+        user.assigned_location_active
+
     }
+
   };
 };
 

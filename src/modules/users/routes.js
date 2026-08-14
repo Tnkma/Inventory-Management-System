@@ -12,7 +12,8 @@ import {
   createNewUser,
   changeUserRole,
   changeUserStatus,
-  userRole
+  userRole,
+  changeUserAssignment
 } from "./controller.js";
 
 
@@ -68,5 +69,10 @@ router.patch(
   changeUserStatus
 );
 
+router.patch(
+  "/:id/assignment",
+  authorizeRoles("ADMIN"),
+  changeUserAssignment
+);
 
 export default router;

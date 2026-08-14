@@ -299,110 +299,156 @@ const getPurchases = async () => {
 };
 
 
+  // =========================================================
+  // GET PURCHASE BY ID
+  // =========================================================
+
+  const getPurchaseById = async (
+    purchaseId
+  ) => {
+
+    const [purchases] = await pool.query(
+      `
+        SELECT
+
+          p.id,
+
+          p.supplier_id,
+          s.name AS supplier,
 
 
-// =========================================================
-// GET PURCHASE BY ID
-// =========================================================
+          -- =================================================
+          -- SUBMITTED BY
+          -- =================================================
 
-const getPurchaseById = async (
-  purchaseId
-) => {
+          p.user_id,
 
-  const [purchases] = await pool.query(
-    `
-      SELECT
-
-        p.id,
-        p.supplier_id,
-        s.name AS supplier,
-
-        p.user_id,
-        CONCAT(
-          u.first_name,
-          ' ',
-          u.last_name
-        ) AS created_by,
-
-        p.purchase_date,
-        p.status,
-        p.total_amount,
-        p.notes,
-
-        p.created_at,
-        p.updated_at
-
-      FROM purchases p
-
-      INNER JOIN suppliers s
-        ON p.supplier_id = s.id
-
-      INNER JOIN users u
-        ON p.user_id = u.id
-
-      WHERE p.id = ?
-
-      LIMIT 1
-    `,
-    [purchaseId]
-  );
+          CONCAT(
+            u.first_name,
+            ' ',
+            u.last_name
+          ) AS created_by,
 
 
-  if (purchases.length === 0) {
+          -- =================================================
+          -- PURCHASE
+          -- =================================================
 
-    const error = new Error(
-      "Purchase not found"
+          p.purchase_date,
+
+          p.status,
+
+          p.total_amount,
+
+          p.notes,
+
+
+          -- =================================================
+          -- APPROVAL
+          -- =================================================
+
+          p.approved_by,
+
+          CONCAT(
+            approver.first_name,
+            ' ',
+            approver.last_name
+          ) AS approved_by_name,
+
+          p.approved_at,
+
+
+          -- =================================================
+          -- RECORD DATES
+          -- =================================================
+
+          p.created_at,
+
+          p.updated_at
+
+
+        FROM purchases p
+
+
+        INNER JOIN suppliers s
+          ON p.supplier_id = s.id
+
+
+        INNER JOIN users u
+          ON p.user_id = u.id
+
+
+        LEFT JOIN users approver
+          ON p.approved_by = approver.id
+
+
+        WHERE p.id = ?
+
+        LIMIT 1
+      `,
+      [purchaseId]
     );
 
-    error.statusCode = 404;
 
-    throw error;
-  }
+    if (purchases.length === 0) {
 
+      const error = new Error(
+        "Purchase not found"
+      );
 
-  const purchase = purchases[0];
+      error.statusCode = 404;
 
-
-  // -----------------------------------------------------
-  // Get purchase items
-  // -----------------------------------------------------
-
-  const [items] = await pool.query(
-    `
-      SELECT
-
-        pi.id,
-
-        pi.ingredient_id,
-        i.name AS ingredient,
-        i.sku,
-        i.unit,
-
-        pi.quantity,
-        pi.unit_price,
-        pi.total_price,
-
-        pi.created_at
-
-      FROM purchase_items pi
-
-      INNER JOIN ingredients i
-        ON pi.ingredient_id = i.id
-
-      WHERE pi.purchase_id = ?
-
-      ORDER BY pi.id ASC
-    `,
-    [purchaseId]
-  );
+      throw error;
+    }
 
 
-  purchase.items = items;
+    const purchase = purchases[0];
 
 
-  return purchase;
-};
+    // -------------------------------------------------------
+    // Get purchase items
+    // -------------------------------------------------------
 
+    const [items] = await pool.query(
+      `
+        SELECT
+
+          pi.id,
+
+          pi.ingredient_id,
+
+          i.name AS ingredient,
+
+          i.sku,
+
+          i.unit,
+
+          pi.quantity,
+
+          pi.unit_price,
+
+          pi.total_price,
+
+          pi.created_at
+
+        FROM purchase_items pi
+
+        INNER JOIN ingredients i
+          ON pi.ingredient_id = i.id
+
+        WHERE pi.purchase_id = ?
+
+        ORDER BY pi.id ASC
+      `,
+      [purchaseId]
+    );
+
+
+    purchase.items = items;
+
+
+    return purchase;
+  };
 
 
 // =========================================================
@@ -499,7 +545,7 @@ const completePurchase = async (
 
           FROM inventory_locations
 
-          WHERE LOWER(name) = LOWER('Main Store')
+          WHERE location_type = 'MAIN_STORE'
             AND is_active = TRUE
 
           LIMIT 1
@@ -794,11 +840,13 @@ const completePurchase = async (
         UPDATE purchases
 
         SET
-          status = 'COMPLETED'
+          status = 'COMPLETED',
+          approved_by = ?,
+          approved_at = CURRENT_TIMESTAMP
 
         WHERE id = ?
       `,
-      [purchaseId]
+      [completedBy, purchaseId]
     );
 
 

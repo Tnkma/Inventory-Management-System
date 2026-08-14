@@ -1,12 +1,15 @@
 import {
   createTransfer,
+  approveTransfer,
+  rejectTransfer,
+  fulfillTransfer,
   getTransfers,
   getTransferById
 } from "./service.js";
 
 
 // =========================================================
-// CREATE TRANSFER
+// CREATE TRANSFER REQUEST
 // =========================================================
 
 const create = async (
@@ -19,8 +22,6 @@ const create = async (
 
     const {
       ingredientId,
-      fromLocationId,
-      toLocationId,
       quantity,
       reason
     } = req.body;
@@ -30,8 +31,6 @@ const create = async (
       await createTransfer(
         {
           ingredientId,
-          fromLocationId,
-          toLocationId,
           quantity,
           reason
         },
@@ -44,7 +43,7 @@ const create = async (
       success: true,
 
       message:
-        "Stock transfer completed successfully",
+        "Stock request created successfully",
 
       data: transfer
 
@@ -59,7 +58,141 @@ const create = async (
 
 
 // =========================================================
-// GET ALL TRANSFERS
+// APPROVE
+// =========================================================
+
+const approve = async (
+  req,
+  res,
+  next
+) => {
+
+  try {
+
+    const {
+      transferId
+    } = req.params;
+
+
+    const transfer =
+      await approveTransfer(
+        transferId,
+        req.user.userId
+      );
+
+
+    res.status(200).json({
+
+      success: true,
+
+      message:
+        "Stock request approved successfully",
+
+      data: transfer
+
+    });
+
+  } catch (error) {
+
+    next(error);
+
+  }
+};
+
+
+// =========================================================
+// REJECT
+// =========================================================
+
+const reject = async (
+  req,
+  res,
+  next
+) => {
+
+  try {
+
+    const {
+      transferId
+    } = req.params;
+
+    const {
+      rejectionReason
+    } = req.body;
+
+
+    const transfer =
+      await rejectTransfer(
+        transferId,
+        req.user.userId,
+        rejectionReason
+      );
+
+
+    res.status(200).json({
+
+      success: true,
+
+      message:
+        "Stock request rejected successfully",
+
+      data: transfer
+
+    });
+
+  } catch (error) {
+
+    next(error);
+
+  }
+};
+
+
+// =========================================================
+// FULFILL
+// =========================================================
+
+const fulfill = async (
+  req,
+  res,
+  next
+) => {
+
+  try {
+
+    const {
+      transferId
+    } = req.params;
+
+
+    const transfer =
+      await fulfillTransfer(
+        transferId,
+        req.user.userId
+      );
+
+
+    res.status(200).json({
+
+      success: true,
+
+      message:
+        "Stock transfer fulfilled successfully",
+
+      data: transfer
+
+    });
+
+  } catch (error) {
+
+    next(error);
+
+  }
+};
+
+
+// =========================================================
+// GET ALL
 // =========================================================
 
 const getAll = async (
@@ -91,7 +224,7 @@ const getAll = async (
 
 
 // =========================================================
-// GET TRANSFER BY ID
+// GET ONE
 // =========================================================
 
 const getOne = async (
@@ -131,6 +264,9 @@ const getOne = async (
 
 export {
   create,
+  approve,
+  reject,
+  fulfill,
   getAll,
   getOne
 };

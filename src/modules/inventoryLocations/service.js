@@ -51,9 +51,10 @@ const createLocation = async ({
         INSERT INTO inventory_locations
         (
           name,
-          description
+          description,
+          location_type
         )
-        VALUES (?, ?)
+        VALUES (?, ?, 'KITCHEN')
       `,
       [
         name,
@@ -112,6 +113,7 @@ const getLocations = async () => {
         id,
         name,
         description,
+        location_type,
         is_active,
         created_at,
         updated_at
@@ -141,6 +143,7 @@ const getLocationById = async (
         id,
         name,
         description,
+        location_type,
         is_active,
         created_at,
         updated_at
@@ -406,6 +409,7 @@ const getLocationStock = async (locationId) => {
         id,
         name,
         description,
+        location_type,
         is_active,
         created_at,
         updated_at

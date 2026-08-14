@@ -8,6 +8,9 @@ import authorizeRoles
 
 import {
   create,
+  approve,
+  reject,
+  fulfill,
   getAll,
   getOne
 } from "./controller.js";
@@ -23,20 +26,24 @@ const router = express.Router();
 router.use(authenticate);
 
 
-// Create transfer
+// =========================================================
+// CREATE REQUEST
+// =========================================================
+
 router.post(
   "/",
   authorizeRoles(
-    "ADMIN",
-    "MANAGER",
-    "STORE_KEEPER"
+    "KITCHEN_STAFF"
   ),
   validateCreateTransfer,
   create
 );
 
 
-// Get all transfers
+// =========================================================
+// GET ALL
+// =========================================================
+
 router.get(
   "/",
   authorizeRoles(
@@ -49,7 +56,10 @@ router.get(
 );
 
 
-// Get transfer by ID
+// =========================================================
+// GET ONE
+// =========================================================
+
 router.get(
   "/:transferId",
   authorizeRoles(
@@ -59,6 +69,47 @@ router.get(
     "KITCHEN_STAFF"
   ),
   getOne
+);
+
+
+// =========================================================
+// APPROVE
+// =========================================================
+
+router.patch(
+  "/:transferId/approve",
+  authorizeRoles(
+    "ADMIN",
+    "MANAGER"
+  ),
+  approve
+);
+
+
+// =========================================================
+// REJECT
+// =========================================================
+
+router.patch(
+  "/:transferId/reject",
+  authorizeRoles(
+    "ADMIN",
+    "MANAGER"
+  ),
+  reject
+);
+
+
+// =========================================================
+// FULFILL
+// =========================================================
+
+router.patch(
+  "/:transferId/fulfill",
+  authorizeRoles(
+    "STORE_KEEPER"
+  ),
+  fulfill
 );
 
 

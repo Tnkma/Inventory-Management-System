@@ -18,12 +18,16 @@ import InventoryDetailModal from "./components/InventoryDetailModal";
 import Categories from "./pages/Categories";
 import Locations from "./pages/Locations";
 import Transfers from "./pages/Transfers";
+import Consumption from "./pages/Consumption";
+import Wastage from "./pages/Wastage";
 
 
 
 import Ingredients from "./pages/Ingredients";
 
 import Login from "./pages/auth/Login";
+// import Register from "./pages/auth/Register";
+
 
 import { useAuth } from "./context/AuthContext";
 
@@ -65,6 +69,7 @@ const App = () => {
         />
 
 
+
         {/* DASHBOARD */}
 
         <Route
@@ -73,6 +78,28 @@ const App = () => {
             <ProtectedRoute>
               <DashboardLayout>
                 <Dashboard />
+              </DashboardLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/consumption"
+          element={
+            <ProtectedRoute>
+              <DashboardLayout>
+                <Consumption />
+              </DashboardLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/wastage"
+          element={
+            <ProtectedRoute>
+              <DashboardLayout>
+                <Wastage />
               </DashboardLayout>
             </ProtectedRoute>
           }

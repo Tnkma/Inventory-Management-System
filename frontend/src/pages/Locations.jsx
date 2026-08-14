@@ -8,6 +8,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Store,
   Warehouse,
   XCircle,
 } from "lucide-react";
@@ -16,6 +17,10 @@ import api from "../services/api";
 
 import LocationFormModal from "../components/LocationFormModal";
 import LocationDetailsModal from "../components/LocationDetailsModal";
+
+import PurchaseDetailModal from "../components/PurchaseDetails";
+import TransferDetailModal from "../components/TransferDetailsModal";
+
 
 // =========================================================
 // HELPERS
@@ -28,6 +33,7 @@ const getCurrentUser = () => {
     return user
       ? JSON.parse(user)
       : null;
+
   } catch {
     return null;
   }
@@ -35,6 +41,7 @@ const getCurrentUser = () => {
 
 
 const formatNumber = (value) => {
+
   return Number(value || 0).toLocaleString(
     undefined,
     {
@@ -44,26 +51,20 @@ const formatNumber = (value) => {
 };
 
 
-const formatDate = (value) => {
+// =========================================================
+// LOCATION TYPE
+// =========================================================
 
-  if (!value) {
-    return "—";
-  }
+const isMainStore = (location) => {
 
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "—";
-  }
-
-  return date.toLocaleDateString(
-    undefined,
-    {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    }
+  return (
+    String(
+      location?.location_type ||
+      location?.locationType ||
+      ""
+    ).toUpperCase() === "MAIN_STORE"
   );
+
 };
 
 
@@ -73,10 +74,20 @@ const formatDate = (value) => {
 
 const Locations = () => {
 
-  const [locations, setLocations] = useState([]);
+  // =======================================================
+  // LOCATIONS
+  // =======================================================
+
+  const [locations, setLocations] =
+    useState([]);
 
   const [locationStock, setLocationStock] =
     useState({});
+
+
+  // =======================================================
+  // PAGE STATE
+  // =======================================================
 
   const [loading, setLoading] =
     useState(true);
@@ -87,17 +98,32 @@ const Locations = () => {
   const [error, setError] =
     useState("");
 
+
+  // =======================================================
+  // FILTERS
+  // =======================================================
+
   const [search, setSearch] =
     useState("");
 
   const [statusFilter, setStatusFilter] =
     useState("ALL");
 
+
+  // =======================================================
+  // LOCATION DETAILS
+  // =======================================================
+
   const [selectedLocation, setSelectedLocation] =
     useState(null);
 
   const [detailsOpen, setDetailsOpen] =
     useState(false);
+
+
+  // =======================================================
+  // LOCATION FORM
+  // =======================================================
 
   const [formOpen, setFormOpen] =
     useState(false);
@@ -107,11 +133,34 @@ const Locations = () => {
 
 
   // =======================================================
+  // PURCHASE DETAIL MODAL
+  // =======================================================
+
+  const [selectedPurchaseId, setSelectedPurchaseId] =
+    useState(null);
+
+  const [purchaseDetailsOpen, setPurchaseDetailsOpen] =
+    useState(false);
+
+
+  // =======================================================
+  // TRANSFER DETAIL MODAL
+  // =======================================================
+
+  const [selectedTransferId, setSelectedTransferId] =
+    useState(null);
+
+  const [transferDetailsOpen, setTransferDetailsOpen] =
+    useState(false);
+
+
+  // =======================================================
   // CURRENT USER
   // =======================================================
 
   const currentUser =
     getCurrentUser();
+
 
   const role = String(
     currentUser?.role ||
@@ -119,6 +168,7 @@ const Locations = () => {
     currentUser?.role?.name ||
     ""
   ).toUpperCase();
+
 
   const canManage =
     role === "ADMIN" ||
@@ -132,12 +182,15 @@ const Locations = () => {
   const loadLocationStock =
     async (locationList) => {
 
-      if (!Array.isArray(locationList) ||
-          locationList.length === 0) {
+      if (
+        !Array.isArray(locationList) ||
+        locationList.length === 0
+      ) {
 
         setLocationStock({});
         return;
       }
+
 
       try {
 
@@ -152,6 +205,7 @@ const Locations = () => {
                     await api.get(
                       `/inventory-locations/${location.id}/stock`
                     );
+
 
                   return {
                     locationId:
@@ -169,6 +223,7 @@ const Locations = () => {
                     err
                   );
 
+
                   return {
                     locationId:
                       location.id,
@@ -183,15 +238,30 @@ const Locations = () => {
 
         const stockMap = {};
 
+
         responses.forEach(
           ({
             locationId,
-            data
+            data,
           }) => {
 
             if (!data) {
               return;
             }
+
+
+            const location =
+              data.location ||
+              locationList.find(
+                (item) =>
+                  Number(item.id) ===
+                  Number(locationId)
+              );
+
+
+            const mainStore =
+              isMainStore(location);
+
 
             const items =
               Array.isArray(data.items)
@@ -207,33 +277,60 @@ const Locations = () => {
             items.forEach(
               (item) => {
 
-                current += Number(
-                  item.current_quantity || 0
-                );
+                const itemCurrent =
+                  Number(
+                    item.current_quantity || 0
+                  );
 
-                reserved += Number(
-                  item.reserved_quantity || 0
-                );
 
-                available += Number(
-                  item.available_quantity ??
-                  (
-                    Number(
-                      item.current_quantity || 0
-                    ) -
-                    Number(
-                      item.reserved_quantity || 0
-                    )
-                  )
-                );
+                /*
+                 * RESERVED STOCK EXISTS ONLY
+                 * FOR THE MAIN STORE.
+                 */
+                const itemReserved =
+                  mainStore
+                    ? Number(
+                        item.reserved_quantity || 0
+                      )
+                    : 0;
+
+
+                /*
+                 * MAIN STORE:
+                 * available = current - reserved
+                 *
+                 * KITCHEN:
+                 * available = current
+                 */
+                const itemAvailable =
+                  mainStore
+                    ? Number(
+                        item.available_quantity ??
+                        (
+                          itemCurrent -
+                          itemReserved
+                        )
+                      )
+                    : itemCurrent;
+
+
+                current +=
+                  itemCurrent;
+
+
+                reserved +=
+                  itemReserved;
+
+
+                available +=
+                  itemAvailable;
               }
             );
 
 
             stockMap[locationId] = {
 
-              location:
-                data.location,
+              location,
 
               items,
 
@@ -245,12 +342,17 @@ const Locations = () => {
               reserved,
 
               available,
+
+              isMainStore:
+                mainStore,
             };
           }
         );
 
 
-        setLocationStock(stockMap);
+        setLocationStock(
+          stockMap
+        );
 
       } catch (err) {
 
@@ -258,7 +360,6 @@ const Locations = () => {
           "Failed to load location stock:",
           err
         );
-
       }
     };
 
@@ -273,10 +374,14 @@ const Locations = () => {
       try {
 
         if (showInitialLoading) {
+
           setLoading(true);
+
         } else {
+
           setRefreshing(true);
         }
+
 
         setError("");
 
@@ -300,12 +405,39 @@ const Locations = () => {
           locationData
         );
 
+
+        // ---------------------------------------------------
+        // Refresh selected location
+        // ---------------------------------------------------
+
+        if (selectedLocation) {
+
+          const refreshedLocation =
+            locationData.find(
+              (location) =>
+                Number(location.id) ===
+                Number(selectedLocation.id)
+            );
+
+
+          if (refreshedLocation) {
+
+            setSelectedLocation(
+              (current) => ({
+                ...current,
+                ...refreshedLocation,
+              })
+            );
+          }
+        }
+
       } catch (err) {
 
         console.error(
           "Failed to load locations:",
           err
         );
+
 
         setError(
           err.response?.data?.message ||
@@ -316,7 +448,6 @@ const Locations = () => {
 
         setLoading(false);
         setRefreshing(false);
-
       }
     };
 
@@ -376,8 +507,46 @@ const Locations = () => {
     }, [
       locations,
       search,
-      statusFilter
+      statusFilter,
     ]);
+
+
+  // =======================================================
+  // LOCATION GROUPS
+  // =======================================================
+
+  const mainStore =
+    useMemo(
+      () => {
+
+        return (
+          filteredLocations.find(
+            (location) =>
+              isMainStore(location)
+          ) || null
+        );
+
+      },
+      [
+        filteredLocations,
+      ]
+    );
+
+
+  const kitchenLocations =
+    useMemo(
+      () => {
+
+        return filteredLocations.filter(
+          (location) =>
+            !isMainStore(location)
+        );
+
+      },
+      [
+        filteredLocations,
+      ]
+    );
 
 
   // =======================================================
@@ -399,36 +568,78 @@ const Locations = () => {
         active;
 
 
+      const mainStoreLocation =
+        locations.find(
+          (location) =>
+            isMainStore(location)
+        );
+
+
+      const mainStoreStock =
+        mainStoreLocation
+          ? locationStock[
+              mainStoreLocation.id
+            ] || {}
+          : {};
+
+
       let ingredientCount = 0;
       let current = 0;
       let reserved = 0;
       let available = 0;
 
 
-      Object.values(
+      /*
+       * Track ALL STOCK records.
+       *
+       * Reserved stock is deliberately
+       * counted only from Main Store.
+       */
+      Object.entries(
         locationStock
       ).forEach(
-        (stock) => {
+        ([
+          locationId,
+          stock,
+        ]) => {
 
           ingredientCount +=
             Number(
               stock.ingredientCount || 0
             );
 
+
           current +=
             Number(
               stock.current || 0
             );
 
-          reserved +=
-            Number(
-              stock.reserved || 0
-            );
 
-          available +=
-            Number(
-              stock.available || 0
-            );
+          if (
+            stock.isMainStore
+          ) {
+
+            reserved +=
+              Number(
+                stock.reserved || 0
+              );
+
+            available +=
+              Number(
+                stock.available || 0
+              );
+
+          } else {
+
+            /*
+             * Kitchen stock has no
+             * reservation bucket.
+             */
+            available +=
+              Number(
+                stock.current || 0
+              );
+          }
         }
       );
 
@@ -449,23 +660,37 @@ const Locations = () => {
         reserved,
 
         available,
+
+        mainStoreCurrent:
+          Number(
+            mainStoreStock.current || 0
+          ),
+
+        mainStoreReserved:
+          Number(
+            mainStoreStock.reserved || 0
+          ),
+
+        mainStoreAvailable:
+          Number(
+            mainStoreStock.available || 0
+          ),
       };
 
     }, [
       locations,
-      locationStock
+      locationStock,
     ]);
 
 
   // =======================================================
-  // ACTIONS
+  // LOCATION ACTIONS
   // =======================================================
 
   const handleCreate = () => {
 
     setEditingLocation(null);
     setFormOpen(true);
-
   };
 
 
@@ -478,7 +703,6 @@ const Locations = () => {
     );
 
     setFormOpen(true);
-
   };
 
 
@@ -491,7 +715,6 @@ const Locations = () => {
     );
 
     setDetailsOpen(true);
-
   };
 
 
@@ -502,9 +725,12 @@ const Locations = () => {
       setEditingLocation(null);
 
       await fetchLocations(false);
-
     };
 
+
+  // =======================================================
+  // TOGGLE STATUS
+  // =======================================================
 
   const handleToggleStatus =
     async (location) => {
@@ -513,6 +739,7 @@ const Locations = () => {
         !Boolean(
           location.is_active
         );
+
 
       const action =
         nextStatus
@@ -576,6 +803,7 @@ const Locations = () => {
           err
         );
 
+
         setError(
           err.response?.data?.message ||
           "Unable to update location status."
@@ -583,6 +811,100 @@ const Locations = () => {
       }
     };
 
+
+  // =======================================================
+  // PURCHASE DETAIL
+  // =======================================================
+
+  const handleOpenPurchase =
+    (purchaseId) => {
+
+      if (!purchaseId) {
+        return;
+      }
+
+
+      setDetailsOpen(false);
+
+
+      setSelectedPurchaseId(
+        purchaseId
+      );
+
+
+      setPurchaseDetailsOpen(
+        true
+      );
+    };
+
+
+  const handleClosePurchase =
+    () => {
+
+      setPurchaseDetailsOpen(
+        false
+      );
+
+
+      setSelectedPurchaseId(
+        null
+      );
+
+
+      setDetailsOpen(
+        true
+      );
+    };
+
+
+  // =======================================================
+  // TRANSFER DETAIL
+  // =======================================================
+
+  const handleOpenTransfer =
+    (transferId) => {
+
+      if (!transferId) {
+        return;
+      }
+
+
+      setDetailsOpen(false);
+
+
+      setSelectedTransferId(
+        transferId
+      );
+
+
+      setTransferDetailsOpen(
+        true
+      );
+    };
+
+
+  const handleCloseTransfer =
+    () => {
+
+      setTransferDetailsOpen(
+        false
+      );
+
+
+      setSelectedTransferId(
+        null
+      );
+
+
+      setDetailsOpen(
+        true
+      );
+    };
+
+
+  // =======================================================
+  // FILTER HELPERS
+  // =======================================================
 
   const hasActiveFilters =
     search.trim() !== "" ||
@@ -593,7 +915,6 @@ const Locations = () => {
 
     setSearch("");
     setStatusFilter("ALL");
-
   };
 
 
@@ -605,38 +926,84 @@ const Locations = () => {
 
     {
       key: "locations",
-      label: "Total Locations",
-      value: summary.total,
-      caption: "Inventory storage locations",
-      icon: MapPin,
-      color: "violet",
+
+      label:
+        "Total Locations",
+
+      value:
+        summary.total,
+
+      caption:
+        `${summary.active} active · ${summary.inactive} inactive`,
+
+      icon:
+        MapPin,
+
+      color:
+        "violet",
     },
 
     {
-      key: "ingredients",
-      label: "Tracked Stock",
-      value: summary.ingredientCount,
-      caption: "Inventory records across locations",
-      icon: Package,
-      color: "blue",
+      key: "main-store",
+
+      label:
+        "Main Store Stock",
+
+      value:
+        formatNumber(
+          summary.mainStoreCurrent
+        ),
+
+      caption:
+        "Current stock at Main Store",
+
+      icon:
+        Warehouse,
+
+      color:
+        "violet",
     },
 
     {
       key: "reserved",
-      label: "Reserved Stock",
-      value: formatNumber(summary.reserved),
-      caption: "Stock currently reserved",
-      icon: Warehouse,
-      color: "amber",
+
+      label:
+        "Main Store Reserved",
+
+      value:
+        formatNumber(
+          summary.mainStoreReserved
+        ),
+
+      caption:
+        "Stock reserved for approved requests",
+
+      icon:
+        Package,
+
+      color:
+        "amber",
     },
 
     {
       key: "available",
-      label: "Available Stock",
-      value: formatNumber(summary.available),
-      caption: "Stock available for operations",
-      icon: CheckCircle2,
-      color: "emerald",
+
+      label:
+        "Main Store Available",
+
+      value:
+        formatNumber(
+          summary.mainStoreAvailable
+        ),
+
+      caption:
+        "Available to fulfill kitchen requests",
+
+      icon:
+        CheckCircle2,
+
+      color:
+        "emerald",
     },
   ];
 
@@ -644,26 +1011,330 @@ const Locations = () => {
   const colorClasses = {
 
     violet: {
-      bg: "bg-violet-50",
-      text: "text-violet-600",
+      bg:
+        "bg-violet-50",
+
+      text:
+        "text-violet-600",
     },
 
     blue: {
-      bg: "bg-blue-50",
-      text: "text-blue-600",
+      bg:
+        "bg-blue-50",
+
+      text:
+        "text-blue-600",
     },
 
     amber: {
-      bg: "bg-amber-50",
-      text: "text-amber-600",
+      bg:
+        "bg-amber-50",
+
+      text:
+        "text-amber-600",
     },
 
     emerald: {
-      bg: "bg-emerald-50",
-      text: "text-emerald-600",
-    },
+      bg:
+        "bg-emerald-50",
 
+      text:
+        "text-emerald-600",
+    },
   };
+
+
+  // =======================================================
+  // LOCATION CARD
+  // =======================================================
+
+  const renderLocationCard =
+    (
+      location,
+      type
+    ) => {
+
+      const active =
+        Boolean(
+          location.is_active
+        );
+
+
+      const stock =
+        locationStock[
+          location.id
+        ] || {};
+
+
+      const mainStoreCard =
+        type === "MAIN_STORE";
+
+
+      return (
+
+        <div
+          key={location.id}
+          className={`rounded-2xl border bg-white shadow-sm ${
+            mainStoreCard
+              ? "border-violet-200 ring-1 ring-violet-100"
+              : "border-slate-200"
+          }`}
+        >
+
+          {/* CARD HEADER */}
+
+          <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-5">
+
+            <div className="flex min-w-0 items-center gap-3">
+
+              <div
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+                  mainStoreCard
+                    ? "bg-violet-50 text-violet-600"
+                    : "bg-blue-50 text-blue-600"
+                }`}
+              >
+
+                {mainStoreCard ? (
+                  <Warehouse size={20} />
+                ) : (
+                  <Store size={20} />
+                )}
+
+              </div>
+
+
+              <div className="min-w-0">
+
+                <div className="flex flex-wrap items-center gap-2">
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleView(
+                        location
+                      )
+                    }
+                    className="truncate text-left text-base font-semibold text-slate-900 transition hover:text-violet-600"
+                  >
+                    {location.name}
+                  </button>
+
+
+                  <span
+                    className={`rounded-full px-2 py-1 text-[10px] font-semibold ${
+                      mainStoreCard
+                        ? "bg-violet-50 text-violet-600"
+                        : "bg-blue-50 text-blue-600"
+                    }`}
+                  >
+                    {mainStoreCard
+                      ? "MAIN_STORE"
+                      : "KITCHEN"}
+                  </span>
+
+
+                  {active ? (
+
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-600">
+
+                      <CheckCircle2
+                        size={11}
+                      />
+
+                      ACTIVE
+
+                    </span>
+
+                  ) : (
+
+                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500">
+
+                      <XCircle
+                        size={11}
+                      />
+
+                      INACTIVE
+
+                    </span>
+
+                  )}
+
+                </div>
+
+
+                <p className="mt-1 text-xs text-slate-400">
+
+                  {location.description ||
+                    (
+                      mainStoreCard
+                        ? "Central inventory receiving and supply location."
+                        : "Kitchen inventory location."
+                    )}
+
+                </p>
+
+              </div>
+
+            </div>
+
+
+            <button
+              type="button"
+              onClick={() =>
+                handleView(
+                  location
+                )
+              }
+              className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold text-violet-600 transition hover:bg-violet-50"
+            >
+              View Stock
+            </button>
+
+          </div>
+
+
+          {/* STOCK */}
+
+          <div
+            className={`grid grid-cols-1 gap-3 p-5 ${
+              mainStoreCard
+                ? "sm:grid-cols-4"
+                : "sm:grid-cols-3"
+            }`}
+          >
+
+            {/* STOCK RECORDS */}
+
+            <div className="rounded-xl bg-slate-50 p-4">
+
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                Stock Records
+              </p>
+
+
+              <p className="mt-2 text-xl font-bold text-slate-900">
+                {stock.ingredientCount ??
+                  0}
+              </p>
+
+
+              <p className="mt-1 text-[10px] text-slate-400">
+                Ingredients tracked
+              </p>
+
+            </div>
+
+
+            {/* CURRENT */}
+
+            <div className="rounded-xl bg-slate-50 p-4">
+
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                Current Stock
+              </p>
+
+
+              <p className="mt-2 text-xl font-bold text-slate-900">
+                {formatNumber(
+                  stock.current
+                )}
+              </p>
+
+
+              <p className="mt-1 text-[10px] text-slate-400">
+                Total physical stock
+              </p>
+
+            </div>
+
+
+            {/* RESERVED — MAIN STORE ONLY */}
+
+            {mainStoreCard && (
+
+              <div className="rounded-xl bg-amber-50 p-4">
+
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-500">
+                  Reserved
+                </p>
+
+
+                <p className="mt-2 text-xl font-bold text-amber-600">
+                  {formatNumber(
+                    stock.reserved
+                  )}
+                </p>
+
+
+                <p className="mt-1 text-[10px] text-amber-500">
+                  Approved kitchen requests
+                </p>
+
+              </div>
+
+            )}
+
+
+            {/* AVAILABLE */}
+
+            <div className="rounded-xl bg-emerald-50 p-4">
+
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-500">
+                Available
+              </p>
+
+
+              <p className="mt-2 text-xl font-bold text-emerald-600">
+                {formatNumber(
+                  stock.available
+                )}
+              </p>
+
+
+              <p className="mt-1 text-[10px] text-emerald-500">
+                {mainStoreCard
+                  ? "Current minus reserved"
+                  : "Kitchen stock available"}
+              </p>
+
+            </div>
+
+          </div>
+
+
+          {/* CARD ACTIONS */}
+
+          {canManage && (
+
+            <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
+
+              <button
+                type="button"
+                onClick={() =>
+                  handleEdit(
+                    location
+                  )
+                }
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+              >
+
+                <Edit3
+                  size={13}
+                />
+
+                Edit
+
+              </button>
+
+            </div>
+
+          )}
+
+        </div>
+
+      );
+    };
 
 
   // =======================================================
@@ -673,6 +1344,7 @@ const Locations = () => {
   if (loading) {
 
     return (
+
       <div className="min-h-full bg-white">
 
         <div className="flex min-h-[500px] items-center justify-center">
@@ -688,9 +1360,11 @@ const Locations = () => {
 
             </div>
 
+
             <p className="mt-4 text-sm font-semibold text-slate-700">
               Loading locations
             </p>
+
 
             <p className="mt-1 text-xs text-slate-400">
               Fetching locations and stock...
@@ -701,6 +1375,7 @@ const Locations = () => {
         </div>
 
       </div>
+
     );
   }
 
@@ -713,7 +1388,10 @@ const Locations = () => {
 
     <div className="min-h-full bg-white text-slate-900">
 
-      {/* HEADER */}
+
+      {/* =================================================
+          HEADER
+      ================================================= */}
 
       <div className="mb-7 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
 
@@ -725,17 +1403,21 @@ const Locations = () => {
               Inventory Locations
             </h1>
 
+
             {refreshing && (
+
               <RefreshCw
                 size={15}
                 className="animate-spin text-violet-500"
               />
+
             )}
 
           </div>
 
+
           <p className="mt-1 text-sm text-slate-500">
-            View where inventory is stored and how much stock is available at each location.
+            Main Store supplies the kitchens, while each kitchen manages its own received stock.
           </p>
 
         </div>
@@ -774,7 +1456,9 @@ const Locations = () => {
               className="inline-flex h-10 items-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700"
             >
 
-              <Plus size={16} />
+              <Plus
+                size={16}
+              />
 
               Add Location
 
@@ -787,7 +1471,9 @@ const Locations = () => {
       </div>
 
 
-      {/* ERROR */}
+      {/* =================================================
+          ERROR
+      ================================================= */}
 
       {error && (
 
@@ -798,11 +1484,13 @@ const Locations = () => {
             className="mt-0.5 shrink-0 text-red-500"
           />
 
+
           <div>
 
             <p className="text-sm font-semibold text-red-700">
               Location operation failed
             </p>
+
 
             <p className="mt-0.5 text-xs text-red-600">
               {error}
@@ -815,7 +1503,9 @@ const Locations = () => {
       )}
 
 
-      {/* SUMMARY */}
+      {/* =================================================
+          SUMMARY
+      ================================================= */}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
 
@@ -826,7 +1516,7 @@ const Locations = () => {
             value,
             caption,
             icon: Icon,
-            color
+            color,
           }) => (
 
             <div
@@ -840,9 +1530,12 @@ const Locations = () => {
                   className={`flex h-10 w-10 items-center justify-center rounded-xl ${colorClasses[color].bg} ${colorClasses[color].text}`}
                 >
 
-                  <Icon size={19} />
+                  <Icon
+                    size={19}
+                  />
 
                 </div>
+
 
                 <span
                   className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${colorClasses[color].bg} ${colorClasses[color].text}`}
@@ -857,9 +1550,11 @@ const Locations = () => {
                 {label}
               </p>
 
+
               <p className="mt-1 text-3xl font-bold text-slate-900">
                 {value}
               </p>
+
 
               <p className="mt-1.5 text-xs text-slate-400">
                 {caption}
@@ -873,13 +1568,13 @@ const Locations = () => {
       </div>
 
 
-      {/* LOCATION TABLE */}
+      {/* =================================================
+          FILTER BAR
+      ================================================= */}
 
       <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
 
-        {/* FILTER BAR */}
-
-        <div className="flex flex-col gap-4 border-b border-slate-100 p-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
 
           <div className="relative w-full lg:max-w-md">
 
@@ -887,6 +1582,7 @@ const Locations = () => {
               size={16}
               className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
             />
+
 
             <input
               type="search"
@@ -946,321 +1642,213 @@ const Locations = () => {
 
         </div>
 
+      </div>
 
-        {/* EMPTY */}
 
-        {filteredLocations.length === 0 && (
+      {/* =================================================
+          EMPTY
+      ================================================= */}
 
-          <div className="p-14 text-center">
+      {filteredLocations.length === 0 && (
 
-            <MapPin
-              size={28}
-              className="mx-auto text-slate-300"
-            />
+        <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-14 text-center shadow-sm">
 
-            <p className="mt-4 text-sm font-semibold text-slate-700">
-              No locations found
-            </p>
+          <MapPin
+            size={28}
+            className="mx-auto text-slate-300"
+          />
 
-            <p className="mt-1 text-xs text-slate-400">
-              {hasActiveFilters
-                ? "Try changing your search or filters."
-                : "Create your first inventory location."}
-            </p>
 
+          <p className="mt-4 text-sm font-semibold text-slate-700">
+            No locations found
+          </p>
 
-            {!hasActiveFilters &&
-              canManage && (
 
-                <button
-                  type="button"
-                  onClick={handleCreate}
-                  className="mt-4 inline-flex items-center gap-2 rounded-lg bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-600 hover:bg-violet-100"
-                >
+          <p className="mt-1 text-xs text-slate-400">
 
-                  <Plus size={14} />
+            {hasActiveFilters
+              ? "Try changing your search or filters."
+              : "Create your first inventory location."}
 
-                  Add Location
+          </p>
 
-                </button>
 
-              )}
+          {!hasActiveFilters &&
+            canManage && (
 
-          </div>
+              <button
+                type="button"
+                onClick={handleCreate}
+                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-600 hover:bg-violet-100"
+              >
 
-        )}
+                <Plus
+                  size={14}
+                />
 
+                Add Location
 
-        {/* TABLE */}
+              </button>
 
-        {filteredLocations.length > 0 && (
+            )}
 
-          <div className="overflow-x-auto">
+        </div>
 
-            <table className="w-full">
+      )}
 
-              <thead>
 
-                <tr className="border-b border-slate-100 bg-slate-50/60">
+      {/* =================================================
+          MAIN STORE
+      ================================================= */}
 
-                  <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                    Location
-                  </th>
+      {filteredLocations.length > 0 && (
 
-                  <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                    Stock Records
-                  </th>
+        <>
 
-                  <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                    Current
-                  </th>
+          <section className="mt-6">
 
-                  <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                    Reserved
-                  </th>
+            <div className="mb-3 flex items-center gap-2">
 
-                  <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                    Available
-                  </th>
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-50 text-violet-600">
 
-                  <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                    Status
-                  </th>
+                <Warehouse
+                  size={16}
+                />
 
-                  <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                    Action
-                  </th>
+              </div>
 
-                </tr>
 
-              </thead>
+              <div>
 
+                <h2 className="text-sm font-bold text-slate-900">
+                  Main Store
+                </h2>
 
-              <tbody>
 
-                {filteredLocations.map(
-                  (location) => {
+                <p className="text-[11px] text-slate-400">
+                  Central supply location and source for kitchen transfers.
+                </p>
 
-                    const active =
-                      Boolean(
-                        location.is_active
-                      );
+              </div>
 
+            </div>
 
-                    const stock =
-                      locationStock[
-                        location.id
-                      ] || {};
 
+            {mainStore ? (
 
-                    return (
+              renderLocationCard(
+                mainStore,
+                "MAIN_STORE"
+              )
 
-                      <tr
-                        key={location.id}
-                        className="border-b border-slate-50 transition-colors last:border-0 hover:bg-slate-50/70"
-                      >
+            ) : (
 
-                        {/* LOCATION */}
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-10 text-center">
 
-                        <td className="px-6 py-4">
+                <Warehouse
+                  size={28}
+                  className="mx-auto text-slate-300"
+                />
 
-                          <div className="flex items-center gap-3">
 
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+                <p className="mt-3 text-sm font-semibold text-slate-700">
+                  Main Store not found
+                </p>
 
-                              <MapPin size={16} />
 
-                            </div>
+                <p className="mt-1 text-xs text-slate-400">
+                  No MAIN_STORE location matches the current filters.
+                </p>
 
+              </div>
 
-                            <div className="min-w-0">
+            )}
 
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleView(
-                                    location
-                                  )
-                                }
-                                className="truncate text-left text-sm font-semibold text-slate-800 transition hover:text-violet-600"
-                              >
-                                {location.name}
-                              </button>
+          </section>
 
-                              <p className="mt-0.5 text-[11px] text-slate-400">
-                                {location.description ||
-                                  `Location #${location.id}`}
-                              </p>
 
-                            </div>
+          {/* =================================================
+              KITCHENS
+          ================================================= */}
 
-                          </div>
+          <section className="mt-8">
 
-                        </td>
+            <div className="mb-3 flex items-center gap-2">
 
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
 
-                        {/* STOCK RECORDS */}
+                <Store
+                  size={16}
+                />
 
-                        <td className="px-6 py-4">
+              </div>
 
-                          <span className="text-sm font-semibold text-slate-800">
 
-                            {stock.ingredientCount ??
-                              "—"}
+              <div>
 
-                          </span>
+                <h2 className="text-sm font-bold text-slate-900">
+                  Kitchens
+                </h2>
 
-                          <span className="ml-1 text-[11px] text-slate-400">
-                            ingredients
-                          </span>
 
-                        </td>
+                <p className="text-[11px] text-slate-400">
+                  Kitchen locations receiving fulfilled stock transfers.
+                </p>
 
+              </div>
 
-                        {/* CURRENT */}
+            </div>
 
-                        <td className="px-6 py-4">
 
-                          <span className="text-sm font-semibold text-slate-800">
+            {kitchenLocations.length === 0 ? (
 
-                            {stock.current !== undefined
-                              ? formatNumber(
-                                  stock.current
-                                )
-                              : "—"}
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-10 text-center">
 
-                          </span>
+                <Store
+                  size={28}
+                  className="mx-auto text-slate-300"
+                />
 
-                        </td>
 
+                <p className="mt-3 text-sm font-semibold text-slate-700">
+                  No kitchens found
+                </p>
 
-                        {/* RESERVED */}
 
-                        <td className="px-6 py-4">
+                <p className="mt-1 text-xs text-slate-400">
 
-                          <span className="text-sm font-medium text-amber-600">
+                  {hasActiveFilters
+                    ? "Try changing your search or status filter."
+                    : "Create kitchen locations to begin assigning inventory."}
 
-                            {stock.reserved !== undefined
-                              ? formatNumber(
-                                  stock.reserved
-                                )
-                              : "—"}
+                </p>
 
-                          </span>
+              </div>
 
-                        </td>
+            ) : (
 
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
 
-                        {/* AVAILABLE */}
-
-                        <td className="px-6 py-4">
-
-                          <span className="text-sm font-semibold text-emerald-600">
-
-                            {stock.available !== undefined
-                              ? formatNumber(
-                                  stock.available
-                                )
-                              : "—"}
-
-                          </span>
-
-                        </td>
-
-
-                        {/* STATUS */}
-
-                        <td className="px-6 py-4">
-
-                          {active ? (
-
-                            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-600">
-
-                              <CheckCircle2 size={13} />
-
-                              Active
-
-                            </span>
-
-                          ) : (
-
-                            <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500">
-
-                              <XCircle size={13} />
-
-                              Inactive
-
-                            </span>
-
-                          )}
-
-                        </td>
-
-
-                        {/* ACTION */}
-
-                        <td className="px-6 py-4">
-
-                          <div className="flex items-center justify-end gap-1">
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleView(
-                                  location
-                                )
-                              }
-                              className="rounded-lg px-3 py-1.5 text-xs font-semibold text-violet-600 transition hover:bg-violet-50"
-                            >
-                              View Stock
-                            </button>
-
-
-                            {canManage && (
-
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleEdit(
-                                    location
-                                  )
-                                }
-                                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
-                              >
-
-                                <Edit3 size={13} />
-
-                                Edit
-
-                              </button>
-
-                            )}
-
-                          </div>
-
-                        </td>
-
-                      </tr>
-
-                    );
-
-                  }
+                {kitchenLocations.map(
+                  (location) =>
+                    renderLocationCard(
+                      location,
+                      "KITCHEN"
+                    )
                 )}
 
-              </tbody>
+              </div>
 
-            </table>
+            )}
 
-          </div>
-
-        )}
+          </section>
 
 
-        {/* FOOTER */}
+          {/* =================================================
+              LOCATION COUNT
+          ================================================= */}
 
-        {filteredLocations.length > 0 && (
-
-          <div className="border-t border-slate-100 px-6 py-3.5 text-[11px] text-slate-400">
+          <div className="mt-5 text-[11px] text-slate-400">
 
             Showing{" "}
             {filteredLocations.length}{" "}
@@ -1270,40 +1858,61 @@ const Locations = () => {
 
           </div>
 
-        )}
+        </>
 
-      </div>
+      )}
 
 
-      {/* FORM MODAL */}
+      {/* =================================================
+          LOCATION FORM MODAL
+      ================================================= */}
 
       <LocationFormModal
-        isOpen={formOpen}
-        location={editingLocation}
+        isOpen={
+          formOpen
+        }
+
+        location={
+          editingLocation
+        }
+
         onClose={() => {
 
           setFormOpen(false);
           setEditingLocation(null);
 
         }}
+
         onSuccess={
           handleFormSuccess
         }
       />
 
 
-      {/* DETAILS MODAL */}
+      {/* =================================================
+          LOCATION DETAILS MODAL
+      ================================================= */}
 
       <LocationDetailsModal
-        location={selectedLocation}
-        isOpen={detailsOpen}
-        canManage={canManage}
+        location={
+          selectedLocation
+        }
+
+        isOpen={
+          detailsOpen
+        }
+
+        canManage={
+          canManage
+        }
+
         onClose={() => {
 
           setDetailsOpen(false);
           setSelectedLocation(null);
 
         }}
+
         onEdit={(location) => {
 
           setDetailsOpen(false);
@@ -1315,8 +1924,55 @@ const Locations = () => {
           setFormOpen(true);
 
         }}
+
         onToggleStatus={
           handleToggleStatus
+        }
+
+        onOpenPurchase={
+          handleOpenPurchase
+        }
+
+        onOpenTransfer={
+          handleOpenTransfer
+        }
+      />
+
+
+      {/* =================================================
+          PURCHASE DETAIL MODAL
+      ================================================= */}
+
+      <PurchaseDetailModal
+        purchaseId={
+          selectedPurchaseId
+        }
+
+        isOpen={
+          purchaseDetailsOpen
+        }
+
+        onClose={
+          handleClosePurchase
+        }
+      />
+
+
+      {/* =================================================
+          TRANSFER DETAIL MODAL
+      ================================================= */}
+
+      <TransferDetailModal
+        transferId={
+          selectedTransferId
+        }
+
+        isOpen={
+          transferDetailsOpen
+        }
+
+        onClose={
+          handleCloseTransfer
         }
       />
 
