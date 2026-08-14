@@ -4,9 +4,11 @@ import {
   CheckCircle2,
   Edit3,
   MapPin,
+  Package,
   Plus,
   RefreshCw,
   Search,
+  Warehouse,
   XCircle,
 } from "lucide-react";
 
@@ -15,285 +17,921 @@ import api from "../services/api";
 import LocationFormModal from "../components/LocationFormModal";
 import LocationDetailsModal from "../components/LocationDetailsModal";
 
-// ===== HELPERS =====
+// =========================================================
+// HELPERS
+// =========================================================
+
 const getCurrentUser = () => {
   try {
     const user = localStorage.getItem("user");
-    return user ? JSON.parse(user) : null;
+
+    return user
+      ? JSON.parse(user)
+      : null;
   } catch {
     return null;
   }
 };
 
-const formatDate = (value) => {
-  if (!value) return "—";
 
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-
-  return date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+const formatNumber = (value) => {
+  return Number(value || 0).toLocaleString(
+    undefined,
+    {
+      maximumFractionDigits: 3,
+    }
+  );
 };
 
+
+const formatDate = (value) => {
+
+  if (!value) {
+    return "—";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+
+  return date.toLocaleDateString(
+    undefined,
+    {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    }
+  );
+};
+
+
+// =========================================================
+// COMPONENT
+// =========================================================
+
 const Locations = () => {
+
   const [locations, setLocations] = useState([]);
 
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState("");
+  const [locationStock, setLocationStock] =
+    useState({});
 
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [loading, setLoading] =
+    useState(true);
 
-  const [selectedLocation, setSelectedLocation] = useState(null);
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [refreshing, setRefreshing] =
+    useState(false);
 
-  const [formOpen, setFormOpen] = useState(false);
-  const [editingLocation, setEditingLocation] = useState(null);
+  const [error, setError] =
+    useState("");
 
-  // ===== CURRENT USER =====
-  const currentUser = getCurrentUser();
+  const [search, setSearch] =
+    useState("");
+
+  const [statusFilter, setStatusFilter] =
+    useState("ALL");
+
+  const [selectedLocation, setSelectedLocation] =
+    useState(null);
+
+  const [detailsOpen, setDetailsOpen] =
+    useState(false);
+
+  const [formOpen, setFormOpen] =
+    useState(false);
+
+  const [editingLocation, setEditingLocation] =
+    useState(null);
+
+
+  // =======================================================
+  // CURRENT USER
+  // =======================================================
+
+  const currentUser =
+    getCurrentUser();
 
   const role = String(
-    currentUser?.role || currentUser?.roleName || currentUser?.role?.name || ""
+    currentUser?.role ||
+    currentUser?.roleName ||
+    currentUser?.role?.name ||
+    ""
   ).toUpperCase();
 
-  const canManage = role === "ADMIN" || role === "MANAGER";
+  const canManage =
+    role === "ADMIN" ||
+    role === "MANAGER";
 
-  // ===== FETCH LOCATIONS =====
-  const fetchLocations = async (showInitialLoading = true) => {
-    try {
-      if (showInitialLoading) {
-        setLoading(true);
-      } else {
-        setRefreshing(true);
+
+  // =======================================================
+  // LOAD STOCK FOR LOCATIONS
+  // =======================================================
+
+  const loadLocationStock =
+    async (locationList) => {
+
+      if (!Array.isArray(locationList) ||
+          locationList.length === 0) {
+
+        setLocationStock({});
+        return;
       }
-      setError("");
 
-      const response = await api.get("/inventory-locations");
+      try {
 
-      setLocations(response.data?.data || []);
-    } catch (err) {
-      console.error("Failed to load locations:", err);
-      setError(err.response?.data?.message || "Unable to load inventory locations.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+        const responses =
+          await Promise.all(
+            locationList.map(
+              async (location) => {
+
+                try {
+
+                  const response =
+                    await api.get(
+                      `/inventory-locations/${location.id}/stock`
+                    );
+
+                  return {
+                    locationId:
+                      location.id,
+
+                    data:
+                      response.data?.data ||
+                      null,
+                  };
+
+                } catch (err) {
+
+                  console.error(
+                    `Failed to load stock for location ${location.id}:`,
+                    err
+                  );
+
+                  return {
+                    locationId:
+                      location.id,
+
+                    data: null,
+                  };
+                }
+              }
+            )
+          );
+
+
+        const stockMap = {};
+
+        responses.forEach(
+          ({
+            locationId,
+            data
+          }) => {
+
+            if (!data) {
+              return;
+            }
+
+            const items =
+              Array.isArray(data.items)
+                ? data.items
+                : [];
+
+
+            let current = 0;
+            let reserved = 0;
+            let available = 0;
+
+
+            items.forEach(
+              (item) => {
+
+                current += Number(
+                  item.current_quantity || 0
+                );
+
+                reserved += Number(
+                  item.reserved_quantity || 0
+                );
+
+                available += Number(
+                  item.available_quantity ??
+                  (
+                    Number(
+                      item.current_quantity || 0
+                    ) -
+                    Number(
+                      item.reserved_quantity || 0
+                    )
+                  )
+                );
+              }
+            );
+
+
+            stockMap[locationId] = {
+
+              location:
+                data.location,
+
+              items,
+
+              ingredientCount:
+                items.length,
+
+              current,
+
+              reserved,
+
+              available,
+            };
+          }
+        );
+
+
+        setLocationStock(stockMap);
+
+      } catch (err) {
+
+        console.error(
+          "Failed to load location stock:",
+          err
+        );
+
+      }
+    };
+
+
+  // =======================================================
+  // FETCH LOCATIONS
+  // =======================================================
+
+  const fetchLocations =
+    async (showInitialLoading = true) => {
+
+      try {
+
+        if (showInitialLoading) {
+          setLoading(true);
+        } else {
+          setRefreshing(true);
+        }
+
+        setError("");
+
+
+        const response =
+          await api.get(
+            "/inventory-locations"
+          );
+
+
+        const locationData =
+          response.data?.data || [];
+
+
+        setLocations(
+          locationData
+        );
+
+
+        await loadLocationStock(
+          locationData
+        );
+
+      } catch (err) {
+
+        console.error(
+          "Failed to load locations:",
+          err
+        );
+
+        setError(
+          err.response?.data?.message ||
+          "Unable to load inventory locations."
+        );
+
+      } finally {
+
+        setLoading(false);
+        setRefreshing(false);
+
+      }
+    };
+
 
   useEffect(() => {
+
     fetchLocations(true);
+
   }, []);
 
-  // ===== FILTER LOCATIONS =====
-  const filteredLocations = useMemo(() => {
-    const searchTerm = search.trim().toLowerCase();
 
-    return locations.filter((location) => {
-      const matchesSearch =
-        !searchTerm ||
-        location.name?.toLowerCase().includes(searchTerm) ||
-        location.description?.toLowerCase().includes(searchTerm);
+  // =======================================================
+  // FILTER LOCATIONS
+  // =======================================================
 
-      const matchesStatus =
-        statusFilter === "ALL" ||
-        (statusFilter === "ACTIVE" && Boolean(location.is_active)) ||
-        (statusFilter === "INACTIVE" && !Boolean(location.is_active));
+  const filteredLocations =
+    useMemo(() => {
 
-      return matchesSearch && matchesStatus;
-    });
-  }, [locations, search, statusFilter]);
+      const searchTerm =
+        search
+          .trim()
+          .toLowerCase();
 
-  // ===== SUMMARY =====
-  const summary = useMemo(() => {
-    const active = locations.filter((location) => Boolean(location.is_active)).length;
-    const inactive = locations.length - active;
 
-    return { total: locations.length, active, inactive };
-  }, [locations]);
+      return locations.filter(
+        (location) => {
 
-  // ===== ACTIONS =====
+          const matchesSearch =
+            !searchTerm ||
+            location.name
+              ?.toLowerCase()
+              .includes(searchTerm) ||
+            location.description
+              ?.toLowerCase()
+              .includes(searchTerm);
+
+
+          const matchesStatus =
+            statusFilter === "ALL" ||
+            (
+              statusFilter === "ACTIVE" &&
+              Boolean(location.is_active)
+            ) ||
+            (
+              statusFilter === "INACTIVE" &&
+              !Boolean(location.is_active)
+            );
+
+
+          return (
+            matchesSearch &&
+            matchesStatus
+          );
+        }
+      );
+
+    }, [
+      locations,
+      search,
+      statusFilter
+    ]);
+
+
+  // =======================================================
+  // SUMMARY
+  // =======================================================
+
+  const summary =
+    useMemo(() => {
+
+      const active =
+        locations.filter(
+          (location) =>
+            Boolean(location.is_active)
+        ).length;
+
+
+      const inactive =
+        locations.length -
+        active;
+
+
+      let ingredientCount = 0;
+      let current = 0;
+      let reserved = 0;
+      let available = 0;
+
+
+      Object.values(
+        locationStock
+      ).forEach(
+        (stock) => {
+
+          ingredientCount +=
+            Number(
+              stock.ingredientCount || 0
+            );
+
+          current +=
+            Number(
+              stock.current || 0
+            );
+
+          reserved +=
+            Number(
+              stock.reserved || 0
+            );
+
+          available +=
+            Number(
+              stock.available || 0
+            );
+        }
+      );
+
+
+      return {
+
+        total:
+          locations.length,
+
+        active,
+
+        inactive,
+
+        ingredientCount,
+
+        current,
+
+        reserved,
+
+        available,
+      };
+
+    }, [
+      locations,
+      locationStock
+    ]);
+
+
+  // =======================================================
+  // ACTIONS
+  // =======================================================
+
   const handleCreate = () => {
+
     setEditingLocation(null);
     setFormOpen(true);
+
   };
 
-  const handleEdit = (location) => {
-    setEditingLocation(location);
+
+  const handleEdit = (
+    location
+  ) => {
+
+    setEditingLocation(
+      location
+    );
+
     setFormOpen(true);
+
   };
 
-  const handleView = (location) => {
-    setSelectedLocation(location);
+
+  const handleView = (
+    location
+  ) => {
+
+    setSelectedLocation(
+      location
+    );
+
     setDetailsOpen(true);
+
   };
 
-  const handleFormSuccess = async () => {
-    setFormOpen(false);
-    setEditingLocation(null);
-    await fetchLocations(false);
-  };
 
-  const handleToggleStatus = async (location) => {
-    const nextStatus = !Boolean(location.is_active);
-    const action = nextStatus ? "activate" : "deactivate";
+  const handleFormSuccess =
+    async () => {
 
-    const confirmed = window.confirm(`Are you sure you want to ${action} "${location.name}"?`);
-    if (!confirmed) return;
-
-    try {
-      setError("");
-
-      const response = await api.patch(`/inventory-locations/${location.id}/status`);
-      const updated = response.data?.data;
+      setFormOpen(false);
+      setEditingLocation(null);
 
       await fetchLocations(false);
 
-      // Keep the details modal synchronized.
-      if (selectedLocation && selectedLocation.id === location.id) {
-        setSelectedLocation((current) =>
-          current
-            ? { ...current, is_active: updated?.isActive ?? updated?.is_active ?? nextStatus }
-            : current
+    };
+
+
+  const handleToggleStatus =
+    async (location) => {
+
+      const nextStatus =
+        !Boolean(
+          location.is_active
+        );
+
+      const action =
+        nextStatus
+          ? "activate"
+          : "deactivate";
+
+
+      const confirmed =
+        window.confirm(
+          `Are you sure you want to ${action} "${location.name}"?`
+        );
+
+
+      if (!confirmed) {
+        return;
+      }
+
+
+      try {
+
+        setError("");
+
+
+        const response =
+          await api.patch(
+            `/inventory-locations/${location.id}/status`
+          );
+
+
+        const updated =
+          response.data?.data;
+
+
+        await fetchLocations(false);
+
+
+        if (
+          selectedLocation &&
+          selectedLocation.id === location.id
+        ) {
+
+          setSelectedLocation(
+            (current) =>
+              current
+                ? {
+                    ...current,
+
+                    is_active:
+                      updated?.isActive ??
+                      updated?.is_active ??
+                      nextStatus,
+                  }
+                : current
+          );
+        }
+
+      } catch (err) {
+
+        console.error(
+          "Failed to update location status:",
+          err
+        );
+
+        setError(
+          err.response?.data?.message ||
+          "Unable to update location status."
         );
       }
-    } catch (err) {
-      console.error("Failed to update location status:", err);
-      setError(err.response?.data?.message || "Unable to update location status.");
-    }
-  };
+    };
 
-  const hasActiveFilters = search.trim() !== "" || statusFilter !== "ALL";
+
+  const hasActiveFilters =
+    search.trim() !== "" ||
+    statusFilter !== "ALL";
+
 
   const clearFilters = () => {
+
     setSearch("");
     setStatusFilter("ALL");
+
   };
+
+
+  // =======================================================
+  // SUMMARY CARDS
+  // =======================================================
 
   const summaryCards = [
-    { key: "total", label: "Total Locations", value: summary.total, caption: "Inventory storage locations", badge: "All", icon: MapPin, color: "violet" },
-    { key: "active", label: "Active Locations", value: summary.active, caption: "Available for inventory", badge: "Active", icon: CheckCircle2, color: "emerald" },
-    { key: "inactive", label: "Inactive Locations", value: summary.inactive, caption: "Currently unavailable", badge: "Inactive", icon: XCircle, color: "slate" },
+
+    {
+      key: "locations",
+      label: "Total Locations",
+      value: summary.total,
+      caption: "Inventory storage locations",
+      icon: MapPin,
+      color: "violet",
+    },
+
+    {
+      key: "ingredients",
+      label: "Tracked Stock",
+      value: summary.ingredientCount,
+      caption: "Inventory records across locations",
+      icon: Package,
+      color: "blue",
+    },
+
+    {
+      key: "reserved",
+      label: "Reserved Stock",
+      value: formatNumber(summary.reserved),
+      caption: "Stock currently reserved",
+      icon: Warehouse,
+      color: "amber",
+    },
+
+    {
+      key: "available",
+      label: "Available Stock",
+      value: formatNumber(summary.available),
+      caption: "Stock available for operations",
+      icon: CheckCircle2,
+      color: "emerald",
+    },
   ];
 
+
   const colorClasses = {
-    violet: { bg: "bg-violet-50", text: "text-violet-600" },
-    emerald: { bg: "bg-emerald-50", text: "text-emerald-600" },
-    slate: { bg: "bg-slate-100", text: "text-slate-500" },
+
+    violet: {
+      bg: "bg-violet-50",
+      text: "text-violet-600",
+    },
+
+    blue: {
+      bg: "bg-blue-50",
+      text: "text-blue-600",
+    },
+
+    amber: {
+      bg: "bg-amber-50",
+      text: "text-amber-600",
+    },
+
+    emerald: {
+      bg: "bg-emerald-50",
+      text: "text-emerald-600",
+    },
+
   };
 
-  // ===== LOADING =====
+
+  // =======================================================
+  // LOADING
+  // =======================================================
+
   if (loading) {
+
     return (
       <div className="min-h-full bg-white">
+
         <div className="flex min-h-[500px] items-center justify-center">
+
           <div className="text-center">
+
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-50 text-violet-600">
-              <RefreshCw size={20} className="animate-spin" />
+
+              <RefreshCw
+                size={20}
+                className="animate-spin"
+              />
+
             </div>
-            <p className="mt-4 text-sm font-semibold text-slate-700">Loading locations</p>
-            <p className="mt-1 text-xs text-slate-400">Fetching inventory storage locations...</p>
+
+            <p className="mt-4 text-sm font-semibold text-slate-700">
+              Loading locations
+            </p>
+
+            <p className="mt-1 text-xs text-slate-400">
+              Fetching locations and stock...
+            </p>
+
           </div>
+
         </div>
+
       </div>
     );
   }
 
-  // ===== RENDER =====
+
+  // =======================================================
+  // RENDER
+  // =======================================================
+
   return (
+
     <div className="min-h-full bg-white text-slate-900">
+
       {/* HEADER */}
+
       <div className="mb-7 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+
         <div>
+
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Inventory Locations</h1>
-            {refreshing && <RefreshCw size={15} className="animate-spin text-violet-500" />}
+
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+              Inventory Locations
+            </h1>
+
+            {refreshing && (
+              <RefreshCw
+                size={15}
+                className="animate-spin text-violet-500"
+              />
+            )}
+
           </div>
-          <p className="mt-1 text-sm text-slate-500">Manage the storage locations where inventory is kept.</p>
+
+          <p className="mt-1 text-sm text-slate-500">
+            View where inventory is stored and how much stock is available at each location.
+          </p>
+
         </div>
 
+
         <div className="flex items-center gap-2">
+
           <button
             type="button"
-            onClick={() => fetchLocations(false)}
+            onClick={() =>
+              fetchLocations(false)
+            }
             disabled={refreshing}
             className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-600 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
+
+            <RefreshCw
+              size={16}
+              className={
+                refreshing
+                  ? "animate-spin"
+                  : ""
+              }
+            />
+
             Refresh
+
           </button>
 
+
           {canManage && (
+
             <button
               type="button"
               onClick={handleCreate}
               className="inline-flex h-10 items-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700"
             >
+
               <Plus size={16} />
+
               Add Location
+
             </button>
+
           )}
+
         </div>
+
       </div>
+
 
       {/* ERROR */}
+
       {error && (
+
         <div className="mb-6 flex items-start gap-3 rounded-2xl border border-red-100 bg-red-50 px-4 py-3.5">
-          <XCircle size={18} className="mt-0.5 shrink-0 text-red-500" />
+
+          <XCircle
+            size={18}
+            className="mt-0.5 shrink-0 text-red-500"
+          />
+
           <div>
-            <p className="text-sm font-semibold text-red-700">Location operation failed</p>
-            <p className="mt-0.5 text-xs text-red-600">{error}</p>
+
+            <p className="text-sm font-semibold text-red-700">
+              Location operation failed
+            </p>
+
+            <p className="mt-0.5 text-xs text-red-600">
+              {error}
+            </p>
+
           </div>
+
         </div>
+
       )}
 
+
       {/* SUMMARY */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {summaryCards.map(({ key, label, value, caption, badge, icon: Icon, color }) => (
-          <div key={key} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-start justify-between">
-              <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${colorClasses[color].bg} ${colorClasses[color].text}`}>
-                <Icon size={19} />
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+
+        {summaryCards.map(
+          ({
+            key,
+            label,
+            value,
+            caption,
+            icon: Icon,
+            color
+          }) => (
+
+            <div
+              key={key}
+              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+            >
+
+              <div className="flex items-start justify-between">
+
+                <div
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl ${colorClasses[color].bg} ${colorClasses[color].text}`}
+                >
+
+                  <Icon size={19} />
+
+                </div>
+
+                <span
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${colorClasses[color].bg} ${colorClasses[color].text}`}
+                >
+                  {label}
+                </span>
+
               </div>
-              <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${colorClasses[color].bg} ${colorClasses[color].text}`}>
-                {badge}
-              </span>
+
+
+              <p className="mt-5 text-xs font-medium text-slate-500">
+                {label}
+              </p>
+
+              <p className="mt-1 text-3xl font-bold text-slate-900">
+                {value}
+              </p>
+
+              <p className="mt-1.5 text-xs text-slate-400">
+                {caption}
+              </p>
+
             </div>
 
-            <p className="mt-5 text-xs font-medium text-slate-500">{label}</p>
-            <p className="mt-1 text-3xl font-bold text-slate-900">{value}</p>
-            <p className="mt-1.5 text-xs text-slate-400">{caption}</p>
-          </div>
-        ))}
+          )
+        )}
+
       </div>
 
-      {/* TABLE */}
+
+      {/* LOCATION TABLE */}
+
       <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+
         {/* FILTER BAR */}
+
         <div className="flex flex-col gap-4 border-b border-slate-100 p-5 lg:flex-row lg:items-center lg:justify-between">
+
           <div className="relative w-full lg:max-w-md">
-            <Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+
+            <Search
+              size={16}
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+            />
+
             <input
               type="search"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) =>
+                setSearch(
+                  event.target.value
+                )
+              }
               placeholder="Search locations..."
               className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm outline-none transition focus:border-violet-300 focus:ring-4 focus:ring-violet-500/10"
             />
+
           </div>
 
+
           <div className="flex flex-wrap items-center gap-3">
+
             <select
               value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
+              onChange={(event) =>
+                setStatusFilter(
+                  event.target.value
+                )
+              }
               className="h-10 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-600 outline-none transition focus:border-violet-300 focus:ring-4 focus:ring-violet-500/10"
             >
-              <option value="ALL">All statuses</option>
-              <option value="ACTIVE">Active</option>
-              <option value="INACTIVE">Inactive</option>
+
+              <option value="ALL">
+                All statuses
+              </option>
+
+              <option value="ACTIVE">
+                Active
+              </option>
+
+              <option value="INACTIVE">
+                Inactive
+              </option>
+
             </select>
 
+
             {hasActiveFilters && (
+
               <button
                 type="button"
                 onClick={clearFilters}
@@ -301,159 +939,390 @@ const Locations = () => {
               >
                 Clear filters
               </button>
+
             )}
+
           </div>
+
         </div>
 
+
         {/* EMPTY */}
+
         {filteredLocations.length === 0 && (
+
           <div className="p-14 text-center">
-            <MapPin size={28} className="mx-auto text-slate-300" />
-            <p className="mt-4 text-sm font-semibold text-slate-700">No locations found</p>
-            <p className="mt-1 text-xs text-slate-400">
-              {hasActiveFilters ? "Try changing your search or filters." : "Create your first inventory location."}
+
+            <MapPin
+              size={28}
+              className="mx-auto text-slate-300"
+            />
+
+            <p className="mt-4 text-sm font-semibold text-slate-700">
+              No locations found
             </p>
 
-            {!hasActiveFilters && canManage && (
-              <button
-                type="button"
-                onClick={handleCreate}
-                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-600 hover:bg-violet-100"
-              >
-                <Plus size={14} />
-                Add Location
-              </button>
-            )}
+            <p className="mt-1 text-xs text-slate-400">
+              {hasActiveFilters
+                ? "Try changing your search or filters."
+                : "Create your first inventory location."}
+            </p>
+
+
+            {!hasActiveFilters &&
+              canManage && (
+
+                <button
+                  type="button"
+                  onClick={handleCreate}
+                  className="mt-4 inline-flex items-center gap-2 rounded-lg bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-600 hover:bg-violet-100"
+                >
+
+                  <Plus size={14} />
+
+                  Add Location
+
+                </button>
+
+              )}
+
           </div>
+
         )}
+
 
         {/* TABLE */}
+
         {filteredLocations.length > 0 && (
+
           <div className="overflow-x-auto">
+
             <table className="w-full">
+
               <thead>
+
                 <tr className="border-b border-slate-100 bg-slate-50/60">
-                  <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Location</th>
-                  <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Description</th>
-                  <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Status</th>
-                  <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Created</th>
-                  <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">Action</th>
+
+                  <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Location
+                  </th>
+
+                  <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Stock Records
+                  </th>
+
+                  <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Current
+                  </th>
+
+                  <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Reserved
+                  </th>
+
+                  <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Available
+                  </th>
+
+                  <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Status
+                  </th>
+
+                  <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Action
+                  </th>
+
                 </tr>
+
               </thead>
 
+
               <tbody>
-                {filteredLocations.map((location) => {
-                  const active = Boolean(location.is_active);
 
-                  return (
-                    <tr key={location.id} className="border-b border-slate-50 transition-colors last:border-0 hover:bg-slate-50/70">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
-                            <MapPin size={16} />
+                {filteredLocations.map(
+                  (location) => {
+
+                    const active =
+                      Boolean(
+                        location.is_active
+                      );
+
+
+                    const stock =
+                      locationStock[
+                        location.id
+                      ] || {};
+
+
+                    return (
+
+                      <tr
+                        key={location.id}
+                        className="border-b border-slate-50 transition-colors last:border-0 hover:bg-slate-50/70"
+                      >
+
+                        {/* LOCATION */}
+
+                        <td className="px-6 py-4">
+
+                          <div className="flex items-center gap-3">
+
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+
+                              <MapPin size={16} />
+
+                            </div>
+
+
+                            <div className="min-w-0">
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleView(
+                                    location
+                                  )
+                                }
+                                className="truncate text-left text-sm font-semibold text-slate-800 transition hover:text-violet-600"
+                              >
+                                {location.name}
+                              </button>
+
+                              <p className="mt-0.5 text-[11px] text-slate-400">
+                                {location.description ||
+                                  `Location #${location.id}`}
+                              </p>
+
+                            </div>
+
                           </div>
-                          <div className="min-w-0">
-                            <button
-                              type="button"
-                              onClick={() => handleView(location)}
-                              className="truncate text-left text-sm font-semibold text-slate-800 transition hover:text-violet-600"
-                            >
-                              {location.name}
-                            </button>
-                            <p className="mt-0.5 text-[11px] text-slate-400">Location #{location.id}</p>
-                          </div>
-                        </div>
-                      </td>
 
-                      <td className="max-w-md px-6 py-4">
-                        <p className="truncate text-sm text-slate-500">{location.description || "No description"}</p>
-                      </td>
+                        </td>
 
-                      <td className="px-6 py-4">
-                        {active ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-600">
-                            <CheckCircle2 size={13} />
-                            Active
+
+                        {/* STOCK RECORDS */}
+
+                        <td className="px-6 py-4">
+
+                          <span className="text-sm font-semibold text-slate-800">
+
+                            {stock.ingredientCount ??
+                              "—"}
+
                           </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500">
-                            <XCircle size={13} />
-                            Inactive
+
+                          <span className="ml-1 text-[11px] text-slate-400">
+                            ingredients
                           </span>
-                        )}
-                      </td>
 
-                      <td className="px-6 py-4">
-                        <span className="text-xs text-slate-500">{formatDate(location.created_at)}</span>
-                      </td>
+                        </td>
 
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            type="button"
-                            onClick={() => handleView(location)}
-                            className="rounded-lg px-3 py-1.5 text-xs font-semibold text-violet-600 transition hover:bg-violet-50"
-                          >
-                            View
-                          </button>
 
-                          {canManage && (
-                            <button
-                              type="button"
-                              onClick={() => handleEdit(location)}
-                              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
-                            >
-                              <Edit3 size={13} />
-                              Edit
-                            </button>
+                        {/* CURRENT */}
+
+                        <td className="px-6 py-4">
+
+                          <span className="text-sm font-semibold text-slate-800">
+
+                            {stock.current !== undefined
+                              ? formatNumber(
+                                  stock.current
+                                )
+                              : "—"}
+
+                          </span>
+
+                        </td>
+
+
+                        {/* RESERVED */}
+
+                        <td className="px-6 py-4">
+
+                          <span className="text-sm font-medium text-amber-600">
+
+                            {stock.reserved !== undefined
+                              ? formatNumber(
+                                  stock.reserved
+                                )
+                              : "—"}
+
+                          </span>
+
+                        </td>
+
+
+                        {/* AVAILABLE */}
+
+                        <td className="px-6 py-4">
+
+                          <span className="text-sm font-semibold text-emerald-600">
+
+                            {stock.available !== undefined
+                              ? formatNumber(
+                                  stock.available
+                                )
+                              : "—"}
+
+                          </span>
+
+                        </td>
+
+
+                        {/* STATUS */}
+
+                        <td className="px-6 py-4">
+
+                          {active ? (
+
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-600">
+
+                              <CheckCircle2 size={13} />
+
+                              Active
+
+                            </span>
+
+                          ) : (
+
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-500">
+
+                              <XCircle size={13} />
+
+                              Inactive
+
+                            </span>
+
                           )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+
+                        </td>
+
+
+                        {/* ACTION */}
+
+                        <td className="px-6 py-4">
+
+                          <div className="flex items-center justify-end gap-1">
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleView(
+                                  location
+                                )
+                              }
+                              className="rounded-lg px-3 py-1.5 text-xs font-semibold text-violet-600 transition hover:bg-violet-50"
+                            >
+                              View Stock
+                            </button>
+
+
+                            {canManage && (
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleEdit(
+                                    location
+                                  )
+                                }
+                                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+                              >
+
+                                <Edit3 size={13} />
+
+                                Edit
+
+                              </button>
+
+                            )}
+
+                          </div>
+
+                        </td>
+
+                      </tr>
+
+                    );
+
+                  }
+                )}
+
               </tbody>
+
             </table>
+
           </div>
+
         )}
+
 
         {/* FOOTER */}
+
         {filteredLocations.length > 0 && (
+
           <div className="border-t border-slate-100 px-6 py-3.5 text-[11px] text-slate-400">
-            Showing {filteredLocations.length} of {locations.length} locations
+
+            Showing{" "}
+            {filteredLocations.length}{" "}
+            of{" "}
+            {locations.length}{" "}
+            locations
+
           </div>
+
         )}
+
       </div>
 
+
       {/* FORM MODAL */}
+
       <LocationFormModal
         isOpen={formOpen}
         location={editingLocation}
         onClose={() => {
+
           setFormOpen(false);
           setEditingLocation(null);
+
         }}
-        onSuccess={handleFormSuccess}
+        onSuccess={
+          handleFormSuccess
+        }
       />
 
+
       {/* DETAILS MODAL */}
+
       <LocationDetailsModal
         location={selectedLocation}
         isOpen={detailsOpen}
         canManage={canManage}
         onClose={() => {
+
           setDetailsOpen(false);
           setSelectedLocation(null);
+
         }}
         onEdit={(location) => {
+
           setDetailsOpen(false);
-          setEditingLocation(location);
+
+          setEditingLocation(
+            location
+          );
+
           setFormOpen(true);
+
         }}
-        onToggleStatus={handleToggleStatus}
+        onToggleStatus={
+          handleToggleStatus
+        }
       />
+
     </div>
   );
 };
+
 
 export default Locations;

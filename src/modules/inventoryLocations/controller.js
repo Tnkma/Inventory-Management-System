@@ -3,7 +3,9 @@ import {
   getLocations,
   getLocationById,
   updateLocation,
-  toggleLocationStatus
+  toggleLocationStatus,
+  getLocationStock,
+  getLocationMovements
 } from "./service.js";
 
 
@@ -191,10 +193,86 @@ const toggleStatus = async (
 };
 
 
+// Get stock for a specific location
+const getStock = async (
+  req,
+  res,
+  next
+) => {
+
+  try {
+
+    const {
+      locationId
+    } = req.params;
+
+
+    const result =
+      await getLocationStock(
+        locationId
+      );
+
+
+    res.status(200).json({
+
+      success: true,
+
+      data: result
+
+    });
+
+  } catch (error) {
+
+    next(error);
+
+  }
+};
+
+
+// =========================================================
+// GET LOCATION MOVEMENTS
+// =========================================================
+
+const getMovements = async (
+  req,
+  res,
+  next
+) => {
+
+  try {
+
+    const {
+      locationId
+    } = req.params;
+
+
+    const movements =
+      await getLocationMovements(
+        locationId
+      );
+
+
+    res.status(200).json({
+
+      success: true,
+
+      data: movements
+
+    });
+
+  } catch (error) {
+
+    next(error);
+
+  }
+};
+
 export {
   create,
   getAll,
   getOne,
   update,
-  toggleStatus
+  toggleStatus,
+  getStock,
+  getMovements
 };

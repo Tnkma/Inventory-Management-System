@@ -11,7 +11,9 @@ import {
   getAll,
   getOne,
   update,
-  toggleStatus
+  toggleStatus,
+  getStock,
+  getMovements
 } from "./controller.js";
 
 import {
@@ -38,6 +40,29 @@ router.get(
   getAll
 );
 
+// Get stock information for a specific location
+router.get(
+  "/:locationId/stock",
+  authorizeRoles(
+    "ADMIN",
+    "MANAGER",
+    "STORE_KEEPER",
+    "KITCHEN_STAFF"
+  ),
+  getStock
+);
+
+// Get location movements for a specific location
+router.get(
+  "/:locationId/movements",
+  authorizeRoles(
+    "ADMIN",
+    "MANAGER",
+    "STORE_KEEPER",
+    "KITCHEN_STAFF"
+  ),
+  getMovements
+);
 
 // Get location by ID
 router.get(
@@ -53,11 +78,11 @@ router.get(
 
 
 // Create location
+// only ADMIN can create a new location
 router.post(
   "/",
   authorizeRoles(
-    "ADMIN",
-    "MANAGER"
+    "ADMIN"
   ),
   validateCreateLocation,
   create
@@ -68,8 +93,7 @@ router.post(
 router.patch(
   "/:locationId",
   authorizeRoles(
-    "ADMIN",
-    "MANAGER"
+    "ADMIN"
   ),
   validateUpdateLocation,
   update
@@ -80,8 +104,7 @@ router.patch(
 router.patch(
   "/:locationId/status",
   authorizeRoles(
-    "ADMIN",
-    "MANAGER"
+    "ADMIN"
   ),
   toggleStatus
 );
